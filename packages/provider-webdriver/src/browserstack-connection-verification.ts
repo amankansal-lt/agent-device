@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
+import { asRecord, fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
 import type {
   CloudWebDriverConnectionVerification,
   CloudWebDriverConnectionVerificationOptions,
@@ -155,10 +155,4 @@ function readBrowserStackApps(
       },
     ];
   });
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }

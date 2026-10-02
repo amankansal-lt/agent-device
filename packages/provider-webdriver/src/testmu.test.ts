@@ -8,6 +8,7 @@ import {
   buildTestMuCapabilities,
   createTestMuUploadApp,
   listTestMuCloudArtifacts,
+  resolveTestMuAppReference,
   uploadTestMuApp,
   uploadTestMuAppFromUrl,
 } from './testmu.ts';
@@ -259,6 +260,25 @@ test('the install adapter uploads the local build and launches the hinted app id
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test('TestMu passes lt:// ids through and has the upload API fetch a public URL', async () => {
+  const forms: FormData[] = [];
+  globalThis.fetch = async (_input, init) => {
+    forms.push(init?.body as FormData);
+    return jsonResponse({ app_id: 'APP9' });
+  };
+  assert.equal(await resolveTestMuAppReference('lt://APP1', auth), 'lt://APP1');
+  assert.equal(forms.length, 0);
+  assert.equal(
+    await resolveTestMuAppReference('https://builds.example/App.apk', auth),
+    'lt://APP9',
+  );
+  assert.equal(forms[0]?.get('url'), 'https://builds.example/App.apk');
+  await assert.rejects(
+    resolveTestMuAppReference('missing.apk', { ...auth, cwd: '/nonexistent' }),
+    /must be an lt:\/\/ app id, URL, or existing local app path/,
+  );
 });
 
 test('TestMu URL upload hands the URL to the upload API and surfaces a failed upload', async () => {

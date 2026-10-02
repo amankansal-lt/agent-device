@@ -4,12 +4,14 @@ import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contract
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import type { CloudWebDriverPlatform, CloudWebDriverUploadApp } from './runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 import {
-  basicAuthHeader,
+  appFileUploadForm,
+  asRecord,
+  createHubUploadApp,
   fetchProviderSessionDetails,
-  readProviderJsonBody,
+  postHubAppUpload,
+  resolveHubAppReference,
   trimTrailingSlash,
 } from './webdriver-utils.ts';
 
@@ -93,9 +95,7 @@ export async function uploadTestMuApp(
           : 'Zip the .app bundle of an iOS simulator build and pass the .zip.',
     });
   }
-  const file = await fs.readFile(appPath);
-  const form = new FormData();
-  form.set('appFile', new Blob([file]), path.basename(appPath));
+  const form = await appFileUploadForm(appPath, 'appFile');
   form.set('name', path.parse(appPath).name);
   return await postTestMuUpload(form, options, signal);
 }
@@ -119,37 +119,40 @@ async function postTestMuUpload(
   options: TestMuUploadOptions,
   signal?: AbortSignal,
 ): Promise<string> {
-  const endpoint = options.endpoint ?? TESTMU_APP_UPLOAD_ENDPOINTS[options.deviceType ?? 'virtual'];
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options),
+  return await postHubAppUpload(
+    form,
+    {
+      service: 'TestMu AI',
+      endpoint: options.endpoint ?? TESTMU_APP_UPLOAD_ENDPOINTS[options.deviceType ?? 'virtual'],
+      clientVersion: options.clientVersion,
+      auth: options,
+      readAppReference: readTestMuAppReference,
     },
-    body: form,
     signal,
-  });
-  const json = await readProviderJsonBody(response);
-  const appUrl = readTestMuAppReference(json);
-  if (!response.ok || !appUrl) {
-    throw new AppError('COMMAND_FAILED', 'TestMu AI app upload failed.', {
-      status: response.status,
-      response: json,
-    });
-  }
-  return appUrl;
+  );
 }
 
 export function createTestMuUploadApp(options: TestMuUploadOptions): CloudWebDriverUploadApp {
-  return async ({ appPath, options: installOptions, signal }) => {
-    const appReference = await uploadTestMuApp(appPath, options, signal);
-    return {
-      appReference,
-      bundleId: installOptions?.appIdentifierHint,
-      packageName: installOptions?.packageNameHint,
-      launchTarget: installOptions?.appIdentifierHint ?? installOptions?.packageNameHint,
-    };
-  };
+  return createHubUploadApp(
+    async (appPath, signal) => await uploadTestMuApp(appPath, options, signal),
+  );
+}
+
+/** The hub only accepts `lt://` references, so a public URL is handed to the upload API to fetch. */
+export async function resolveTestMuAppReference(
+  app: string,
+  options: TestMuUploadOptions & { cwd?: string; signal?: AbortSignal },
+): Promise<string> {
+  return await resolveHubAppReference({
+    service: 'TestMu AI',
+    app,
+    cwd: options.cwd,
+    referenceScheme: 'lt://',
+    referenceLabel: 'an lt:// app id',
+    uploadFile: async (appPath, signal) => await uploadTestMuApp(appPath, options, signal),
+    uploadUrl: async (url, signal) => await uploadTestMuAppFromUrl(url, options, signal),
+    signal: options.signal,
+  });
 }
 
 /**
@@ -184,7 +187,7 @@ export function buildTestMuCapabilities(
       video: true,
       devicelog: true,
       ...deviceFeatures,
-      ...asRecord(configuredLtOptions),
+      ...(asRecord(configuredLtOptions) ?? {}),
       // A configured value cannot switch the device pool or drop the W3C dialect agent-device speaks.
       isRealMobile: options.deviceType === 'real',
       w3c: true,
@@ -194,12 +197,6 @@ export function buildTestMuCapabilities(
 
 export function isTestMuAppReference(value: string): boolean {
   return value.startsWith('lt://');
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 async function fetchTestMuSessionDetails(

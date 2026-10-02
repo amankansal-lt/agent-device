@@ -1,14 +1,14 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
-import { AppError } from '@agent-device/kernel/errors';
-import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 import {
-  basicAuthHeader,
+  appFileUploadForm,
+  asRecord,
+  createHubUploadApp,
   fetchProviderSessionDetails,
+  postHubAppUpload,
+  resolveHubAppReference,
   trimTrailingSlash,
 } from './webdriver-utils.ts';
 
@@ -80,41 +80,41 @@ export async function uploadBrowserStackApp(
   signal?: AbortSignal,
 ): Promise<string> {
   signal?.throwIfAborted();
-  const file = await fs.readFile(appPath);
-  const form = new FormData();
-  form.set('file', new Blob([file]), path.basename(appPath));
-  const response = await fetch(options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options),
+  return await postHubAppUpload(
+    await appFileUploadForm(appPath, 'file'),
+    {
+      service: 'BrowserStack',
+      endpoint: options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+      clientVersion: options.clientVersion,
+      auth: options,
+      readAppReference: readBrowserStackAppUrl,
     },
-    body: form,
     signal,
-  });
-  const json = (await response.json()) as unknown;
-  const appUrl = readBrowserStackAppUrl(json);
-  if (!response.ok || !appUrl) {
-    throw new AppError('COMMAND_FAILED', 'BrowserStack app upload failed.', {
-      status: response.status,
-      response: json,
-    });
-  }
-  return appUrl;
+  );
 }
 
 export function createBrowserStackUploadApp(
   options: Required<BrowserStackUploadOptions>,
 ): CloudWebDriverUploadApp {
-  return async ({ appPath, options: installOptions, signal }) => {
-    const appReference = await uploadBrowserStackApp(appPath, options, signal);
-    return {
-      appReference,
-      bundleId: installOptions?.appIdentifierHint,
-      packageName: installOptions?.packageNameHint,
-      launchTarget: installOptions?.appIdentifierHint ?? installOptions?.packageNameHint,
-    };
-  };
+  return createHubUploadApp(
+    async (appPath, signal) => await uploadBrowserStackApp(appPath, options, signal),
+  );
+}
+
+/** The hub fetches a public URL itself, so only a local path is uploaded. */
+export async function resolveBrowserStackAppReference(
+  app: string,
+  options: BrowserStackUploadOptions & { cwd?: string; signal?: AbortSignal },
+): Promise<string> {
+  return await resolveHubAppReference({
+    service: 'BrowserStack',
+    app,
+    cwd: options.cwd,
+    referenceScheme: 'bs://',
+    referenceLabel: 'a bs:// app id',
+    uploadFile: async (appPath, signal) => await uploadBrowserStackApp(appPath, options, signal),
+    signal: options.signal,
+  });
 }
 
 /**
@@ -142,15 +142,9 @@ export function buildBrowserStackCapabilities(
       buildName: options.buildName,
       sessionName: options.sessionName,
       ...(options.deviceFeatures ?? {}),
-      ...asRecord(configuredBstackOptions),
+      ...(asRecord(configuredBstackOptions) ?? {}),
     },
   };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 async function fetchBrowserStackSessionDetails(

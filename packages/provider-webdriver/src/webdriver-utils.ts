@@ -1,4 +1,11 @@
-import type { DeviceLease } from '@agent-device/contracts/device';
+import fs from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import type {
+  DeviceLease,
+  ProviderDeviceInstallOptions,
+  ProviderDeviceInstallResult,
+} from '@agent-device/contracts/device';
 import {
   PROVIDER_DEVICE_ORIENTATIONS,
   type ProviderDeviceOrientation,
@@ -54,6 +61,104 @@ export function withTrailingSlash(url: URL): URL {
   const copy = new URL(url);
   copy.pathname = `${copy.pathname}/`;
   return copy;
+}
+
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+type HubCredentials = { username: string; accessKey: string };
+
+/** A multipart form carrying the local app file under the hub's field name. */
+export async function appFileUploadForm(appPath: string, fileField: string): Promise<FormData> {
+  const form = new FormData();
+  form.set(fileField, new Blob([await readFile(appPath)]), path.basename(appPath));
+  return form;
+}
+
+/**
+ * POSTs an app upload to a hosted hub and returns the hub's app reference. A non-2xx answer, a
+ * body that is not JSON, or one without a reference is `COMMAND_FAILED` with the HTTP status.
+ */
+export async function postHubAppUpload(
+  form: FormData,
+  options: {
+    service: string;
+    endpoint: string | URL;
+    clientVersion: string;
+    auth: HubCredentials;
+    readAppReference: (body: unknown) => string | undefined;
+  },
+  signal?: AbortSignal,
+): Promise<string> {
+  const response = await fetch(options.endpoint, {
+    method: 'POST',
+    headers: {
+      ...agentDeviceRequestHeaders(options.clientVersion),
+      Authorization: basicAuthHeader(options.auth),
+    },
+    body: form,
+    signal,
+  });
+  const json = await readProviderJsonBody(response);
+  const appReference = options.readAppReference(json);
+  if (!response.ok || !appReference) {
+    throw new AppError('COMMAND_FAILED', `${options.service} app upload failed.`, {
+      status: response.status,
+      response: json,
+    });
+  }
+  return appReference;
+}
+
+/** The `install` adapter of a hosted hub: upload the local build, then launch the hinted app. */
+export function createHubUploadApp(
+  upload: (appPath: string, signal?: AbortSignal) => Promise<string>,
+): (params: {
+  appPath: string;
+  options?: ProviderDeviceInstallOptions;
+  signal?: AbortSignal;
+}) => Promise<ProviderDeviceInstallResult & { appReference: string }> {
+  return async ({ appPath, options, signal }) => ({
+    appReference: await upload(appPath, signal),
+    bundleId: options?.appIdentifierHint,
+    packageName: options?.packageNameHint,
+    launchTarget: options?.appIdentifierHint ?? options?.packageNameHint,
+  });
+}
+
+/**
+ * Turns `--provider-app` into a reference the hub accepts: its own reference scheme passes
+ * through, a public URL passes through unless the hub only takes its own references (then
+ * `uploadUrl` has the hub fetch it), and anything else must be a local file to upload.
+ */
+export async function resolveHubAppReference(options: {
+  service: string;
+  app: string;
+  cwd?: string;
+  referenceScheme: string;
+  /** How the scheme reads in the error message, e.g. `a bs:// app id`. */
+  referenceLabel: string;
+  uploadFile: (appPath: string, signal?: AbortSignal) => Promise<string>;
+  uploadUrl?: (url: string, signal?: AbortSignal) => Promise<string>;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { app } = options;
+  if (app.startsWith(options.referenceScheme)) return app;
+  if (/^https?:\/\//i.test(app)) {
+    return options.uploadUrl ? await options.uploadUrl(app, options.signal) : app;
+  }
+  const appPath = path.resolve(options.cwd ?? process.cwd(), app);
+  if (!fs.existsSync(appPath)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${options.service} --provider-app must be ${options.referenceLabel}, URL, or existing local app path.`,
+      { providerApp: app },
+    );
+  }
+  return await options.uploadFile(appPath, options.signal);
 }
 
 /** The provider rejected or could not answer a verification call; typed so callers never sniff text. */
@@ -148,7 +253,7 @@ export async function fetchProviderSessionDetails(
 }
 
 /** A provider response body parsed as JSON, or `undefined` when it is empty or not JSON (a gateway error page). */
-export async function readProviderJsonBody(response: Response): Promise<unknown> {
+async function readProviderJsonBody(response: Response): Promise<unknown> {
   const text = await response.text();
   if (text.length === 0) return undefined;
   try {

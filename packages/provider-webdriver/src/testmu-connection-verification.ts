@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { fetchProviderVerificationJson, trimTrailingSlash } from './webdriver-utils.ts';
+import { asRecord, fetchProviderVerificationJson, trimTrailingSlash } from './webdriver-utils.ts';
 import { TESTMU_API_ENDPOINT, TESTMU_APPS_ENDPOINT, isTestMuAppReference } from './testmu.ts';
 import type {
   CloudWebDriverConnectionVerification,
@@ -193,10 +193,4 @@ function readTestMuApps(
       },
     ];
   });
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }

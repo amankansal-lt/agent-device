@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
@@ -18,7 +16,7 @@ import {
   buildBrowserStackCapabilities,
   createBrowserStackUploadApp,
   listBrowserStackCloudArtifacts,
-  uploadBrowserStackApp,
+  resolveBrowserStackAppReference,
 } from './browserstack.ts';
 import {
   buildBrowserStackDeviceFeatureCapabilities,
@@ -144,22 +142,24 @@ export function createCloudWebDriverProviderDefinitions(
               'providerOsVersion',
               'BrowserStack requires --provider-os-version <version>.',
             );
-            const app = await resolveBrowserStackAppReference({
-              clientVersion: dependencies.clientVersion,
-              app: requireFlag(
+            const app = await resolveBrowserStackAppReference(
+              requireFlag(
                 request,
                 'providerApp',
                 'BrowserStack requires --provider-app <bs://app-id-or-local-path>.',
               ),
-              cwd: request.cwd,
-              username,
-              accessKey,
-              uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
-              // A local IPA/APK upload can run long (130 MB is routine); an
-              // upload is not a billed resource, so the request's cancellation
-              // may simply abort it — unlike the session creation that follows.
-              signal: request.signal,
-            });
+              {
+                clientVersion: dependencies.clientVersion,
+                username,
+                accessKey,
+                endpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+                cwd: request.cwd,
+                // A local IPA/APK upload can run long (130 MB is routine); an
+                // upload is not a billed resource, so the request's cancellation
+                // may simply abort it — unlike the session creation that follows.
+                signal: request.signal,
+              },
+            );
             return {
               ...base,
               platform,
@@ -300,7 +300,8 @@ export function createCloudWebDriverProviderDefinitions(
             await listTestMuArtifactsFromEnv(provider, providerSessionId, env),
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'TestMu AI');
-            const { buildTestMuCapabilities, createTestMuUploadApp } = await loadTestMu();
+            const { buildTestMuCapabilities, createTestMuUploadApp, resolveTestMuAppReference } =
+              await loadTestMu();
             const {
               buildTestMuDeviceFeatureCapabilities,
               readTestMuDeviceFeatureFields,
@@ -322,30 +323,26 @@ export function createCloudWebDriverProviderDefinitions(
               'providerOsVersion',
               'TestMu AI requires --provider-os-version <version>.',
             );
-            const app = await resolveTestMuAppReference({
+            const upload = {
               clientVersion: dependencies.clientVersion,
-              app: requireFlag(
+              ...credentials,
+              deviceType,
+              endpoint: uploadEndpoint,
+            };
+            const app = await resolveTestMuAppReference(
+              requireFlag(
                 request,
                 'providerApp',
                 'TestMu AI requires --provider-app <lt://app-id, URL, or local path>.',
               ),
-              cwd: request.cwd,
-              ...credentials,
-              deviceType,
-              uploadEndpoint,
-              signal: request.signal,
-            });
+              { ...upload, cwd: request.cwd, signal: request.signal },
+            );
             return {
               ...base,
               platform,
               deviceName,
               auth: credentials,
-              uploadApp: createTestMuUploadApp({
-                clientVersion: dependencies.clientVersion,
-                ...credentials,
-                deviceType,
-                endpoint: uploadEndpoint,
-              }),
+              uploadApp: createTestMuUploadApp(upload),
               webdriverCapabilities: buildTestMuCapabilities({
                 platform,
                 deviceType,
@@ -400,74 +397,6 @@ function testMuAppUploadEndpoint(
   return deviceType === 'real'
     ? env.TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT
     : env.TESTMU_APP_UPLOAD_ENDPOINT;
-}
-
-async function resolveTestMuAppReference(options: {
-  clientVersion: string;
-  app: string;
-  cwd?: string;
-  username: string;
-  accessKey: string;
-  deviceType: ProviderDeviceType;
-  uploadEndpoint?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
-  const { isTestMuAppReference, uploadTestMuApp, uploadTestMuAppFromUrl } = await loadTestMu();
-  if (isTestMuAppReference(options.app)) return options.app;
-  const upload = {
-    clientVersion: options.clientVersion,
-    username: options.username,
-    accessKey: options.accessKey,
-    deviceType: options.deviceType,
-    endpoint: options.uploadEndpoint,
-  };
-  // The hub only accepts lt:// references, so a public URL is handed to the upload API to fetch.
-  if (/^https?:\/\//i.test(options.app)) {
-    return await uploadTestMuAppFromUrl(options.app, upload, options.signal);
-  }
-  const appPath = path.resolve(options.cwd ?? process.cwd(), options.app);
-  if (!fs.existsSync(appPath)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'TestMu AI --provider-app must be an lt:// app id, URL, or existing local app path.',
-      { providerApp: options.app },
-    );
-  }
-  return await uploadTestMuApp(appPath, upload, options.signal);
-}
-
-async function resolveBrowserStackAppReference(options: {
-  clientVersion: string;
-  app: string;
-  cwd?: string;
-  username: string;
-  accessKey: string;
-  uploadEndpoint?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
-  if (isProviderAppReference(options.app)) return options.app;
-  const appPath = path.resolve(options.cwd ?? process.cwd(), options.app);
-  if (!fs.existsSync(appPath)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'BrowserStack --provider-app must be a bs:// app id, URL, or existing local app path.',
-      { providerApp: options.app },
-    );
-  }
-  return await uploadBrowserStackApp(
-    appPath,
-    {
-      clientVersion: options.clientVersion,
-      username: options.username,
-      accessKey: options.accessKey,
-      endpoint: options.uploadEndpoint,
-    },
-    options.signal,
-  );
-}
-
-function isProviderAppReference(value: string): boolean {
-  return value.startsWith('bs://') || /^https?:\/\//.test(value);
 }
 
 function requireRequest(
