@@ -15,11 +15,11 @@ test('provider policy projects provider identity into semantic capabilities', ()
   const browserStack = connectionProviderCapabilities('browserstack');
   assert.equal(browserStack.supportsArtifacts, true);
   assert.equal(browserStack.usesCloudWebDriverLease, true);
-  assert.deepEqual(connectionProviderCapabilities('lambdatest'), {
+  assert.deepEqual(connectionProviderCapabilities('testmu'), {
     ...browserStack,
     requiresAppAttachment: false,
   });
-  assert.equal(isConnectProviderName('lambdatest'), true);
+  assert.equal(isConnectProviderName('testmu'), true);
   assert.equal(connectionProviderCapabilities('aws-device-farm').requiresAppAttachment, true);
   assert.equal(connectionProviderCapabilities('proxy').leaseKind, 'proxy');
 });

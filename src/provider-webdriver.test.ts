@@ -85,29 +85,29 @@ test('root provider facade runs AWS artifact lookup through the host command ada
 
 afterEach(() => vi.unstubAllGlobals());
 
-test('root provider facade looks up LambdaTest artifacts with Basic auth from the environment', async () => {
+test('root provider facade looks up TestMu AI artifacts with Basic auth from the environment', async () => {
   const fetchMock = vi.fn<typeof fetch>(
     async () =>
-      new Response(JSON.stringify({ data: { video_url: 'https://lambdatest.test/video.mp4' } })),
+      new Response(JSON.stringify({ data: { video_url: 'https://testmu.test/video.mp4' } })),
   );
   vi.stubGlobal('fetch', fetchMock);
 
   const result = await providerWebDriver.listArtifactsFromEnv(
-    { provider: 'lambdatest', providerSessionId: 'session-1' },
+    { provider: 'testmu', providerSessionId: 'session-1' },
     {
       LT_USERNAME: 'lt-user',
       LT_ACCESS_KEY: 'lt-key',
-      LAMBDATEST_SESSION_DETAILS_ENDPOINT: 'https://lambdatest.test/sessions',
+      TESTMU_SESSION_DETAILS_ENDPOINT: 'https://testmu.test/sessions',
     },
   );
 
-  assert.equal(result?.provider, 'lambdatest');
+  assert.equal(result?.provider, 'testmu');
   assert.deepEqual(
     result?.cloudArtifacts.map(({ kind, url }) => ({ kind, url })),
-    [{ kind: 'video', url: 'https://lambdatest.test/video.mp4' }],
+    [{ kind: 'video', url: 'https://testmu.test/video.mp4' }],
   );
   const [input, init] = fetchMock.mock.calls[0] ?? [];
-  assert.equal(String(input), 'https://lambdatest.test/sessions/session-1');
+  assert.equal(String(input), 'https://testmu.test/sessions/session-1');
   assert.equal(
     new Headers(init?.headers).get('Authorization'),
     `Basic ${Buffer.from('lt-user:lt-key').toString('base64')}`,

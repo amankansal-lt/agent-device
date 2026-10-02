@@ -24,7 +24,7 @@ import {
   readBrowserStackDeviceFeatureFields,
   rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
-import type { LambdaTestApiOptions } from './lambdatest.ts';
+import type { TestMuApiOptions } from './testmu.ts';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
@@ -35,19 +35,19 @@ import {
   type CloudWebDriverRuntime,
 } from './runtime.ts';
 
-const LAMBDATEST_APPIUM_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
-const LAMBDATEST_CAPABILITY_OVERRIDES = {
+const TESTMU_APPIUM_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
+const TESTMU_CAPABILITY_OVERRIDES = {
   install: {
     support: 'partial',
-    note: 'Local app artifacts are uploaded to LambdaTest app storage, then installed with Appium.',
+    note: 'Local app artifacts are uploaded to TestMu AI app storage, then installed with Appium.',
   },
   portReverse: {
     support: 'unsupported',
-    note: 'Use LambdaTest Tunnel for network tunneling; agent-device port reverse is not available.',
+    note: 'Use TestMu AI Tunnel for network tunneling; agent-device port reverse is not available.',
   },
   artifacts: {
     support: 'supported',
-    note: 'LambdaTest session details expose provider-hosted video, command, Appium, console, and network logs, and screenshots.',
+    note: 'TestMu AI session details expose provider-hosted video, command, Appium, console, and network logs, and screenshots.',
   },
 } as const satisfies CloudWebDriverCapabilityOverrides;
 
@@ -57,7 +57,7 @@ export type DefaultCloudWebDriverArtifactEnv = {
   BROWSERSTACK_SESSION_DETAILS_ENDPOINT?: string;
   LT_USERNAME?: string;
   LT_ACCESS_KEY?: string;
-  LAMBDATEST_SESSION_DETAILS_ENDPOINT?: string;
+  TESTMU_SESSION_DETAILS_ENDPOINT?: string;
   AWS_REGION?: string;
   AWS_DEFAULT_REGION?: string;
 };
@@ -65,8 +65,8 @@ export type DefaultCloudWebDriverArtifactEnv = {
 export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtifactEnv & {
   BROWSERSTACK_WEBDRIVER_ENDPOINT?: string;
   BROWSERSTACK_APP_UPLOAD_ENDPOINT?: string;
-  LAMBDATEST_WEBDRIVER_ENDPOINT?: string;
-  LAMBDATEST_APP_UPLOAD_ENDPOINT?: string;
+  TESTMU_WEBDRIVER_ENDPOINT?: string;
+  TESTMU_APP_UPLOAD_ENDPOINT?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN?: string;
@@ -194,58 +194,47 @@ export function createCloudWebDriverProviderDefinitions(
       },
     },
     {
-      provider: CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+      provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
       createRuntime: (env) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
-          provider: CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+          provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
           platform: 'android',
-          deviceName: 'LambdaTest device',
-          endpoint: env.LAMBDATEST_WEBDRIVER_ENDPOINT ?? LAMBDATEST_APPIUM_ENDPOINT,
-          capabilityOverrides: LAMBDATEST_CAPABILITY_OVERRIDES,
+          deviceName: 'TestMu AI device',
+          endpoint: env.TESTMU_WEBDRIVER_ENDPOINT ?? TESTMU_APPIUM_ENDPOINT,
+          capabilityOverrides: TESTMU_CAPABILITY_OVERRIDES,
           listArtifacts: async ({ provider, providerSessionId }) =>
-            await listLambdaTestArtifacts(
-              provider,
-              providerSessionId,
-              env,
-              dependencies.clientVersion,
-            ),
+            await listTestMuArtifacts(provider, providerSessionId, env, dependencies.clientVersion),
           prepareSession: async ({ req, lease, base }) => {
-            const request = requireRequest(req, 'LambdaTest');
+            const request = requireRequest(req, 'TestMu AI');
             // Loaded on demand so adding a provider does not grow the facade's eager import closure.
-            const {
-              LAMBDATEST_APP_UPLOAD_ENDPOINT,
-              buildLambdaTestCapabilities,
-              createLambdaTestUploadApp,
-            } = await import('./lambdatest.ts');
-            rejectBrowserStackOnlyDeviceFeatures(
-              request.flags,
-              CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
-            );
-            const username = requireEnv(env, 'LT_USERNAME', 'LambdaTest');
-            const accessKey = requireEnv(env, 'LT_ACCESS_KEY', 'LambdaTest');
-            const platform = requireRequestPlatform(request, 'LambdaTest');
+            const { TESTMU_APP_UPLOAD_ENDPOINT, buildTestMuCapabilities, createTestMuUploadApp } =
+              await import('./testmu.ts');
+            rejectBrowserStackOnlyDeviceFeatures(request.flags, CLOUD_WEBDRIVER_PROVIDERS.testMu);
+            const username = requireEnv(env, 'LT_USERNAME', 'TestMu AI');
+            const accessKey = requireEnv(env, 'LT_ACCESS_KEY', 'TestMu AI');
+            const platform = requireRequestPlatform(request, 'TestMu AI');
             const deviceName = requireFlag(
               request,
               'device',
-              'LambdaTest requires --device <name>.',
+              'TestMu AI requires --device <name>.',
             );
             const osVersion = requireFlag(
               request,
               'providerOsVersion',
-              'LambdaTest requires --provider-os-version <version>.',
+              'TestMu AI requires --provider-os-version <version>.',
             );
             const uploadOptions = {
               clientVersion: dependencies.clientVersion,
               username,
               accessKey,
-              endpoint: env.LAMBDATEST_APP_UPLOAD_ENDPOINT ?? LAMBDATEST_APP_UPLOAD_ENDPOINT,
+              endpoint: env.TESTMU_APP_UPLOAD_ENDPOINT ?? TESTMU_APP_UPLOAD_ENDPOINT,
             };
-            const app = await resolveLambdaTestAppReference(
+            const app = await resolveTestMuAppReference(
               requireFlag(
                 request,
                 'providerApp',
-                'LambdaTest requires --provider-app <lt://app-id-or-local-path>.',
+                'TestMu AI requires --provider-app <lt://app-id-or-local-path>.',
               ),
               request.cwd,
               uploadOptions,
@@ -256,8 +245,8 @@ export function createCloudWebDriverProviderDefinitions(
               platform,
               deviceName,
               auth: { username, accessKey },
-              uploadApp: createLambdaTestUploadApp(uploadOptions),
-              webdriverCapabilities: buildLambdaTestCapabilities({
+              uploadApp: createTestMuUploadApp(uploadOptions),
+              webdriverCapabilities: buildTestMuCapabilities({
                 platform,
                 deviceName,
                 osVersion,
@@ -270,8 +259,8 @@ export function createCloudWebDriverProviderDefinitions(
           },
         }),
       listArtifactsFromEnv: async (providerSessionId, env) =>
-        await listLambdaTestArtifacts(
-          CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+        await listTestMuArtifacts(
+          CLOUD_WEBDRIVER_PROVIDERS.testMu,
           providerSessionId,
           env,
           dependencies.clientVersion,
@@ -386,21 +375,21 @@ async function resolveBrowserStackAppReference(options: {
   );
 }
 
-async function resolveLambdaTestAppReference(
+async function resolveTestMuAppReference(
   app: string,
   cwd: string | undefined,
-  uploadOptions: LambdaTestApiOptions,
+  uploadOptions: TestMuApiOptions,
   signal: AbortSignal | undefined,
 ): Promise<string> {
   if (app.startsWith('lt://')) return app;
-  const { uploadLambdaTestApp } = await import('./lambdatest.ts');
-  if (/^https?:\/\//i.test(app)) return await uploadLambdaTestApp(app, uploadOptions, signal);
+  const { uploadTestMuApp } = await import('./testmu.ts');
+  if (/^https?:\/\//i.test(app)) return await uploadTestMuApp(app, uploadOptions, signal);
   const appPath = path.resolve(cwd ?? process.cwd(), app);
   const stat = fs.statSync(appPath, { throwIfNoEntry: false });
   if (!stat?.isFile()) {
     throw new AppError(
       'INVALID_ARGS',
-      'LambdaTest --provider-app must be an lt:// app id, URL, or existing local app file.',
+      'TestMu AI --provider-app must be an lt:// app id, URL, or existing local app file.',
       {
         providerApp: app,
         ...(stat?.isDirectory()
@@ -409,21 +398,21 @@ async function resolveLambdaTestAppReference(
       },
     );
   }
-  return await uploadLambdaTestApp(appPath, uploadOptions, signal);
+  return await uploadTestMuApp(appPath, uploadOptions, signal);
 }
 
-async function listLambdaTestArtifacts(
+async function listTestMuArtifacts(
   provider: string,
   providerSessionId: string | undefined,
   env: DefaultCloudWebDriverArtifactEnv,
   clientVersion: string,
 ): Promise<CloudArtifactsResult | undefined> {
-  const { listLambdaTestCloudArtifacts } = await import('./lambdatest.ts');
-  return await listLambdaTestCloudArtifacts(provider, providerSessionId, {
+  const { listTestMuCloudArtifacts } = await import('./testmu.ts');
+  return await listTestMuCloudArtifacts(provider, providerSessionId, {
     clientVersion,
-    username: requireEnv(env, 'LT_USERNAME', 'LambdaTest artifact lookup'),
-    accessKey: requireEnv(env, 'LT_ACCESS_KEY', 'LambdaTest artifact lookup'),
-    endpoint: env.LAMBDATEST_SESSION_DETAILS_ENDPOINT,
+    username: requireEnv(env, 'LT_USERNAME', 'TestMu AI artifact lookup'),
+    accessKey: requireEnv(env, 'LT_ACCESS_KEY', 'TestMu AI artifact lookup'),
+    endpoint: env.TESTMU_SESSION_DETAILS_ENDPOINT,
   });
 }
 

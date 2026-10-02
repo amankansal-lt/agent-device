@@ -12,7 +12,7 @@ const artifactsCommandMetadata = defineFieldCommandMetadata(
   'List daemon or cloud provider artifacts for an active or completed session.',
   {
     provider: stringField(
-      'Cloud provider name, for example browserstack, lambdatest, or aws-device-farm.',
+      'Cloud provider name, for example browserstack, testmu, or aws-device-farm.',
     ),
     providerSessionId: stringField('Cloud provider session id or ARN.'),
   },

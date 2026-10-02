@@ -12,8 +12,8 @@ export type CloudWebDriverConnectionVerification =
       project?: never;
     })
   | (ProviderConnectionVerification & {
-      provider: 'lambdatest';
-      service: 'LambdaTest';
+      provider: 'testmu';
+      service: 'TestMu AI';
       project?: never;
     })
   | (ProviderConnectionVerification & {
@@ -35,7 +35,7 @@ export type CloudWebDriverConnectionVerificationOptions =
       appsEndpoint?: string | URL;
     }
   | {
-      provider: 'lambdatest';
+      provider: 'testmu';
       username: string;
       accessKey: string;
       platform: 'android' | 'ios';
@@ -60,10 +60,9 @@ export async function verifyCloudWebDriverConnection(
   switch (options.provider) {
     case 'browserstack':
       return await verifyBrowserStackConnection(options, dependencies.clientVersion);
-    case 'lambdatest': {
-      const { verifyLambdaTestConnection } =
-        await import('./lambdatest-connection-verification.ts');
-      return await verifyLambdaTestConnection(options, dependencies.clientVersion);
+    case 'testmu': {
+      const { verifyTestMuConnection } = await import('./testmu-connection-verification.ts');
+      return await verifyTestMuConnection(options, dependencies.clientVersion);
     }
     case 'aws-device-farm':
       return await verifyAwsDeviceFarmConnection(options, dependencies.runHostCommand);

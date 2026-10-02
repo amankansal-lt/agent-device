@@ -8,7 +8,7 @@ import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
-test('LambdaTest uploads an HTTP app by URL before creating the session', async () => {
+test('TestMu AI uploads an HTTP app by URL before creating the session', async () => {
   const fetchMock = vi.fn<typeof fetch>(async (input) =>
     String(input).endsWith('/upload')
       ? jsonResponse({ app_url: 'lt://FROM-URL' })
@@ -16,7 +16,7 @@ test('LambdaTest uploads an HTTP app by URL before creating the session', async 
   );
   vi.stubGlobal('fetch', fetchMock);
 
-  await allocateLambdaTest('https://apps.example/App.apk');
+  await allocateTestMu('https://apps.example/App.apk');
 
   const [upload, session] = fetchMock.mock.calls;
   const form = upload?.[1]?.body as FormData;
@@ -27,12 +27,12 @@ test('LambdaTest uploads an HTTP app by URL before creating the session', async 
   assert.equal(body.capabilities.alwaysMatch['lt:options'].app, 'lt://FROM-URL');
 });
 
-test('LambdaTest rejects a missing local app before calling the provider', async () => {
+test('TestMu AI rejects a missing local app before calling the provider', async () => {
   const fetchMock = vi.fn<typeof fetch>();
   vi.stubGlobal('fetch', fetchMock);
-  const tempDir = await mkdtempForTest('agent-device-lambdatest-app-');
+  const tempDir = await mkdtempForTest('agent-device-testmu-app-');
 
-  await assert.rejects(allocateLambdaTest(path.join(tempDir, 'missing.apk')), (error: unknown) => {
+  await assert.rejects(allocateTestMu(path.join(tempDir, 'missing.apk')), (error: unknown) => {
     assert.equal((error as { code?: string }).code, 'INVALID_ARGS');
     assert.equal((error as { details?: { hint?: string } }).details?.hint, undefined);
     return true;
@@ -40,13 +40,13 @@ test('LambdaTest rejects a missing local app before calling the provider', async
   assert.equal(fetchMock.mock.calls.length, 0);
 });
 
-test('LambdaTest asks for a zipped bundle when given an unzipped .app directory', async () => {
+test('TestMu AI asks for a zipped bundle when given an unzipped .app directory', async () => {
   const fetchMock = vi.fn<typeof fetch>();
   vi.stubGlobal('fetch', fetchMock);
-  const appPath = path.join(await mkdtempForTest('agent-device-lambdatest-app-'), 'Demo.app');
+  const appPath = path.join(await mkdtempForTest('agent-device-testmu-app-'), 'Demo.app');
   await fs.mkdir(appPath);
 
-  await assert.rejects(allocateLambdaTest(appPath), (error: unknown) => {
+  await assert.rejects(allocateTestMu(appPath), (error: unknown) => {
     assert.equal((error as { code?: string }).code, 'INVALID_ARGS');
     assert.match(String((error as { details?: { hint?: string } }).details?.hint), /Zip the \.app/);
     return true;
@@ -54,15 +54,15 @@ test('LambdaTest asks for a zipped bundle when given an unzipped .app directory'
   assert.equal(fetchMock.mock.calls.length, 0);
 });
 
-async function allocateLambdaTest(providerApp: string) {
+async function allocateTestMu(providerApp: string) {
   const runtime = createProviderWebDriver({ clientVersion: '1.2.3', runHostCommand: vi.fn() })
     .createDefaultRuntimes({
       LT_USERNAME: 'lt-user',
       LT_ACCESS_KEY: 'lt-key',
-      LAMBDATEST_WEBDRIVER_ENDPOINT: 'https://lambdatest.test/wd/hub/',
-      LAMBDATEST_APP_UPLOAD_ENDPOINT: 'https://lambdatest.test/upload',
+      TESTMU_WEBDRIVER_ENDPOINT: 'https://testmu.test/wd/hub/',
+      TESTMU_APP_UPLOAD_ENDPOINT: 'https://testmu.test/upload',
     })
-    .find((candidate) => candidate.provider === 'lambdatest');
+    .find((candidate) => candidate.provider === 'testmu');
   assert.ok(runtime);
   try {
     return await runtime.leaseLifecycle.allocate?.(lease, {
@@ -77,7 +77,7 @@ const lease: DeviceLease = {
   leaseId: 'lease-1',
   tenantId: 'tenant-a',
   runId: 'run-a',
-  leaseProvider: 'lambdatest',
+  leaseProvider: 'testmu',
   backend: 'ios-instance',
   createdAt: 1,
   expiresAt: 2,

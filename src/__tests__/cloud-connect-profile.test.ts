@@ -494,14 +494,14 @@ test('connect browserstack persists a local app artifact as an absolute path', a
   }
 });
 
-test('connect lambdatest verifies with LT credentials and stores a profile without them', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-lambdatest-');
+test('connect testmu verifies with LT credentials and stores a profile without them', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LT_USERNAME', 'lt-user');
   vi.stubEnv('LT_ACCESS_KEY', 'lt-key');
   mockedVerifyWebDriverConnection.mockResolvedValueOnce({
-    provider: 'lambdatest',
-    service: 'LambdaTest',
+    provider: 'testmu',
+    service: 'TestMu AI',
     verificationMessage: 'Credentials verified.',
     device: { status: 'deferred', name: 'Pixel 8', platform: 'android', osVersion: '14' },
     app: { status: 'configured', reference: 'lt://APP123' },
@@ -510,7 +510,7 @@ test('connect lambdatest verifies with LT credentials and stores a profile witho
   try {
     await connectWithGeneratedProviderProfile({
       stateDir,
-      positionals: ['lambdatest'],
+      positionals: ['testmu'],
       flags: {
         platform: 'android',
         device: 'Pixel 8',
@@ -521,7 +521,7 @@ test('connect lambdatest verifies with LT credentials and stores a profile witho
     });
 
     assert.deepEqual(mockedVerifyWebDriverConnection.mock.calls[0]?.[0], {
-      provider: 'lambdatest',
+      provider: 'testmu',
       username: 'lt-user',
       accessKey: 'lt-key',
       platform: 'android',
@@ -530,8 +530,8 @@ test('connect lambdatest verifies with LT credentials and stores a profile witho
       app: 'lt://APP123',
     });
     const state = readRequiredActiveState(stateDir);
-    assert.equal(state.leaseProvider, 'lambdatest');
-    assert.match(state.remoteConfigPath, /generated\/lambdatest-[a-f0-9]{16}\.json$/);
+    assert.equal(state.leaseProvider, 'testmu');
+    assert.match(state.remoteConfigPath, /generated\/testmu-[a-f0-9]{16}\.json$/);
     const generated = readGeneratedConfig(state.remoteConfigPath);
     assert.equal(generated.providerApp, 'lt://APP123');
     assert.equal(generated.providerOsVersion, '14');
@@ -822,10 +822,10 @@ test('connect aws-device-farm rejects BrowserStack-only device-feature flags', (
   }
 });
 
-test('connect lambdatest keeps an HTTP app URL for upload at session creation', () => {
+test('connect testmu keeps an HTTP app URL for upload at session creation', () => {
   const resolved = resolveCloudWebDriverConnectProfile({
-    provider: 'lambdatest',
-    stateDir: path.join(mkdtempForTestSync('agent-device-connect-lambdatest-'), '.state'),
+    provider: 'testmu',
+    stateDir: path.join(mkdtempForTestSync('agent-device-connect-testmu-'), '.state'),
     cwd: process.cwd(),
     env: { LT_USERNAME: 'lt-user', LT_ACCESS_KEY: 'lt-key' },
     flags: {
@@ -845,17 +845,17 @@ test('connect lambdatest keeps an HTTP app URL for upload at session creation', 
   );
 });
 
-test('connect lambdatest rejects BrowserStack-only device-feature flags', () => {
+test('connect testmu rejects BrowserStack-only device-feature flags', () => {
   assert.throws(
     () =>
       resolveCloudWebDriverConnectProfile({
-        provider: 'lambdatest',
-        stateDir: path.join(mkdtempForTestSync('agent-device-connect-lambdatest-'), '.state'),
+        provider: 'testmu',
+        stateDir: path.join(mkdtempForTestSync('agent-device-connect-testmu-'), '.state'),
         cwd: process.cwd(),
         env: { LT_USERNAME: 'lt-user', LT_ACCESS_KEY: 'lt-key' },
         flags: { json: false, help: false, version: false, providerTimezone: 'New_York' },
       }),
-    /--provider-timezone is only supported by BrowserStack, not lambdatest/,
+    /--provider-timezone is only supported by BrowserStack, not testmu/,
   );
 });
 

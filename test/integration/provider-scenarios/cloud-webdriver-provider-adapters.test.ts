@@ -142,9 +142,9 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
   });
 }, 15_000);
 
-test('LambdaTest facade nests capabilities in lt:options, uploads apps, and returns artifacts', async () => {
+test('TestMu AI facade nests capabilities in lt:options, uploads apps, and returns artifacts', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    await withProviderScenarioTempDir('agent-device-lambdatest-adapter-', async (tempDir) => {
+    await withProviderScenarioTempDir('agent-device-testmu-adapter-', async (tempDir) => {
       const appPath = path.join(tempDir, 'demo.apk');
       fs.writeFileSync(appPath, 'fake apk');
       const provider = createProviderWebDriver({
@@ -155,13 +155,13 @@ test('LambdaTest facade nests capabilities in lt:options, uploads apps, and retu
         provider.createDefaultRuntimes({
           LT_USERNAME: 'lt-user',
           LT_ACCESS_KEY: 'lt-key',
-          LAMBDATEST_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-          LAMBDATEST_APP_UPLOAD_ENDPOINT: `${server.url}/app/upload/virtualDevice`,
-          LAMBDATEST_SESSION_DETAILS_ENDPOINT: `${server.url}/mobile-automation/api/v1/sessions`,
+          TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+          TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/app/upload/virtualDevice`,
+          TESTMU_SESSION_DETAILS_ENDPOINT: `${server.url}/mobile-automation/api/v1/sessions`,
         }),
-        CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+        CLOUD_WEBDRIVER_PROVIDERS.testMu,
       );
-      const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.lambdaTest);
+      const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.testMu);
       try {
         const allocation = await runtime.leaseLifecycle.allocate?.(lease, {
           flags: { ...browserStackContext(lease).flags, device: 'Pixel 8', providerApp: appPath },
@@ -169,7 +169,7 @@ test('LambdaTest facade nests capabilities in lt:options, uploads apps, and retu
         assert.equal(allocation?.providerSessionId, 'wd-1');
         assert.equal(operationSupport(allocation, 'install'), 'partial');
         assert.equal(operationSupport(allocation, 'artifacts'), 'supported');
-        assert.match(operationNote(allocation, 'portReverse') ?? '', /LambdaTest Tunnel/);
+        assert.match(operationNote(allocation, 'portReverse') ?? '', /TestMu AI Tunnel/);
         const release = await runtime.leaseLifecycle.release?.(lease);
         assert.deepEqual(
           (release?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts.map(

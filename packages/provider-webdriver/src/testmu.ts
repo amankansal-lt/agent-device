@@ -7,11 +7,11 @@ import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { cloudArtifactsReadyOrPending } from './artifact-results.ts';
 import { basicAuthHeader, trimTrailingSlash } from './webdriver-utils.ts';
 
-export const LAMBDATEST_APP_UPLOAD_ENDPOINT =
+export const TESTMU_APP_UPLOAD_ENDPOINT =
   'https://manual-api.lambdatest.com/app/upload/virtualDevice';
-const LAMBDATEST_SESSION_DETAILS_ENDPOINT =
+const TESTMU_SESSION_DETAILS_ENDPOINT =
   'https://mobile-api.lambdatest.com/mobile-automation/api/v1/sessions';
-export type LambdaTestCapabilitiesOptions = {
+export type TestMuCapabilitiesOptions = {
   platform: CloudWebDriverPlatform;
   deviceName: string;
   osVersion: string;
@@ -22,32 +22,32 @@ export type LambdaTestCapabilitiesOptions = {
   configured?: Record<string, unknown>;
 };
 
-export type LambdaTestApiOptions = {
+export type TestMuApiOptions = {
   clientVersion: string;
   username: string;
   accessKey: string;
   endpoint?: string | URL;
 };
 
-export async function listLambdaTestCloudArtifacts(
+export async function listTestMuCloudArtifacts(
   provider: string,
   providerSessionId: string | undefined,
-  options: LambdaTestApiOptions,
+  options: TestMuApiOptions,
 ): Promise<CloudArtifactsResult | undefined> {
   if (!providerSessionId) return undefined;
-  const details = await fetchLambdaTestSessionDetails(providerSessionId, options);
+  const details = await fetchTestMuSessionDetails(providerSessionId, options);
   return cloudArtifactsReadyOrPending({
     provider,
     providerSessionId,
-    artifacts: mapLambdaTestArtifacts(provider, providerSessionId, details),
-    pendingMessage: 'LambdaTest artifacts are not ready yet.',
+    artifacts: mapTestMuArtifacts(provider, providerSessionId, details),
+    pendingMessage: 'TestMu AI artifacts are not ready yet.',
   });
 }
 
 /** Uploads a local app file, or an HTTP(S) app URL by reference, and returns its `lt://` id. */
-export async function uploadLambdaTestApp(
+export async function uploadTestMuApp(
   app: string,
-  options: LambdaTestApiOptions,
+  options: TestMuApiOptions,
   signal?: AbortSignal,
 ): Promise<string> {
   signal?.throwIfAborted();
@@ -61,7 +61,7 @@ export async function uploadLambdaTestApp(
     form.set('appFile', new Blob([file]), path.basename(app));
     form.set('name', path.basename(app));
   }
-  const response = await fetch(options.endpoint ?? LAMBDATEST_APP_UPLOAD_ENDPOINT, {
+  const response = await fetch(options.endpoint ?? TESTMU_APP_UPLOAD_ENDPOINT, {
     method: 'POST',
     headers: {
       ...agentDeviceRequestHeaders(options.clientVersion),
@@ -70,10 +70,10 @@ export async function uploadLambdaTestApp(
     body: form,
     signal,
   });
-  const json = await readLambdaTestJson(response, 'app upload');
-  const appUrl = readLambdaTestAppUrl(json);
+  const json = await readTestMuJson(response, 'app upload');
+  const appUrl = readTestMuAppUrl(json);
   if (!response.ok || !appUrl) {
-    throw new AppError('COMMAND_FAILED', 'LambdaTest app upload failed.', {
+    throw new AppError('COMMAND_FAILED', 'TestMu AI app upload failed.', {
       status: response.status,
       response: json,
     });
@@ -81,11 +81,11 @@ export async function uploadLambdaTestApp(
   return appUrl;
 }
 
-export function createLambdaTestUploadApp(
-  options: Required<LambdaTestApiOptions>,
+export function createTestMuUploadApp(
+  options: Required<TestMuApiOptions>,
 ): CloudWebDriverUploadApp {
   return async ({ appPath, options: installOptions, signal }) => {
-    const appReference = await uploadLambdaTestApp(appPath, options, signal);
+    const appReference = await uploadTestMuApp(appPath, options, signal);
     return {
       appReference,
       bundleId: installOptions?.appIdentifierHint,
@@ -96,12 +96,12 @@ export function createLambdaTestUploadApp(
 }
 
 /**
- * Builds the W3C `alwaysMatch` capabilities for a LambdaTest App Automation session, in the shape
- * LambdaTest documents for emulators and simulators: `platformName` at the top level and every
+ * Builds the W3C `alwaysMatch` capabilities for a TestMu AI App Automation session, in the shape
+ * TestMu AI documents for emulators and simulators: `platformName` at the top level and every
  * selector and label inside `lt:options`.
  */
-export function buildLambdaTestCapabilities(
-  options: LambdaTestCapabilitiesOptions,
+export function buildTestMuCapabilities(
+  options: TestMuCapabilitiesOptions,
 ): Record<string, unknown> {
   const { 'lt:options': configuredLtOptions, ...configured } = options.configured ?? {};
   const platformName = options.platform === 'ios' ? 'iOS' : 'Android';
@@ -120,13 +120,13 @@ export function buildLambdaTestCapabilities(
       video: true,
       devicelog: true,
       ...asRecord(configuredLtOptions),
-      // LambdaTest's documented W3C capability shape requires it, so a configured value cannot drop it.
+      // TestMu AI's documented W3C capability shape requires it, so a configured value cannot drop it.
       w3c: true,
     },
   };
 }
 
-const LAMBDATEST_ARTIFACT_FIELDS: ReadonlyArray<{
+const TESTMU_ARTIFACT_FIELDS: ReadonlyArray<{
   field: string;
   kind: CloudArtifact['kind'];
   name: string;
@@ -139,24 +139,24 @@ const LAMBDATEST_ARTIFACT_FIELDS: ReadonlyArray<{
   { field: 'screenshot_url', kind: 'raw', name: 'Screenshots' },
 ];
 
-function mapLambdaTestArtifacts(
+function mapTestMuArtifacts(
   provider: string,
   providerSessionId: string,
   details: Record<string, unknown>,
 ): CloudArtifact[] {
-  return LAMBDATEST_ARTIFACT_FIELDS.flatMap(({ field, kind, name }) => {
+  return TESTMU_ARTIFACT_FIELDS.flatMap(({ field, kind, name }) => {
     const url = details[field];
     if (typeof url !== 'string' || url.length === 0) return [];
     return [{ provider, providerSessionId, kind, name, url, availability: 'ready' as const }];
   });
 }
 
-async function fetchLambdaTestSessionDetails(
+async function fetchTestMuSessionDetails(
   sessionId: string,
-  options: LambdaTestApiOptions,
+  options: TestMuApiOptions,
 ): Promise<Record<string, unknown>> {
   const endpoint = new URL(
-    `${trimTrailingSlash(String(options.endpoint ?? LAMBDATEST_SESSION_DETAILS_ENDPOINT))}/${encodeURIComponent(sessionId)}`,
+    `${trimTrailingSlash(String(options.endpoint ?? TESTMU_SESSION_DETAILS_ENDPOINT))}/${encodeURIComponent(sessionId)}`,
   );
   const response = await fetch(endpoint, {
     headers: {
@@ -164,11 +164,11 @@ async function fetchLambdaTestSessionDetails(
       Authorization: basicAuthHeader(options),
     },
   });
-  // A session whose details LambdaTest has not published yet reads as pending, not as a failure.
+  // A session whose details TestMu AI has not published yet reads as pending, not as a failure.
   if (response.status === 404) return {};
-  const json = await readLambdaTestJson(response, 'session details lookup');
+  const json = await readTestMuJson(response, 'session details lookup');
   if (!response.ok || !json || typeof json !== 'object') {
-    throw new AppError('COMMAND_FAILED', 'LambdaTest session details lookup failed.', {
+    throw new AppError('COMMAND_FAILED', 'TestMu AI session details lookup failed.', {
       status: response.status,
       response: json,
     });
@@ -176,20 +176,20 @@ async function fetchLambdaTestSessionDetails(
   return asRecord((json as { data?: unknown }).data);
 }
 
-async function readLambdaTestJson(response: Response, action: string): Promise<unknown> {
+async function readTestMuJson(response: Response, action: string): Promise<unknown> {
   try {
     return (await response.json()) as unknown;
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
-      `LambdaTest ${action} returned a response that is not JSON.`,
+      `TestMu AI ${action} returned a response that is not JSON.`,
       { status: response.status },
       error,
     );
   }
 }
 
-function readLambdaTestAppUrl(value: unknown): string | undefined {
+function readTestMuAppUrl(value: unknown): string | undefined {
   const record = asRecord(value);
   if (typeof record.app_url === 'string' && record.app_url.length > 0) return record.app_url;
   return typeof record.app_id === 'string' && record.app_id.length > 0

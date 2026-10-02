@@ -64,10 +64,9 @@ const CONNECT_PROVIDER_ADAPTERS = {
       resolveCloudWebDriverConnectProfile({ provider: 'browserstack', ...context }),
     verify: verifyBrowserStack,
   },
-  lambdatest: {
-    resolve: (context) =>
-      resolveCloudWebDriverConnectProfile({ provider: 'lambdatest', ...context }),
-    verify: verifyLambdaTest,
+  testmu: {
+    resolve: (context) => resolveCloudWebDriverConnectProfile({ provider: 'testmu', ...context }),
+    verify: verifyTestMu,
   },
   'aws-device-farm': {
     resolve: (context) =>
@@ -158,21 +157,21 @@ async function verifyBrowserStack(
   });
 }
 
-async function verifyLambdaTest(
+async function verifyTestMu(
   context: Pick<AdapterContext, 'flags' | 'env'>,
 ): Promise<ConnectVerification> {
   const { flags, env } = context;
   return await providerWebDriver.verifyConnection({
-    provider: 'lambdatest',
-    username: requiredResolvedValue(env.LT_USERNAME, 'LambdaTest profile missed LT_USERNAME.'),
-    accessKey: requiredResolvedValue(env.LT_ACCESS_KEY, 'LambdaTest profile missed LT_ACCESS_KEY.'),
-    platform: requiredResolvedPlatform(flags.platform, 'LambdaTest'),
-    deviceName: requiredResolvedValue(flags.device, 'LambdaTest profile missed device.'),
+    provider: 'testmu',
+    username: requiredResolvedValue(env.LT_USERNAME, 'TestMu AI profile missed LT_USERNAME.'),
+    accessKey: requiredResolvedValue(env.LT_ACCESS_KEY, 'TestMu AI profile missed LT_ACCESS_KEY.'),
+    platform: requiredResolvedPlatform(flags.platform, 'TestMu AI'),
+    deviceName: requiredResolvedValue(flags.device, 'TestMu AI profile missed device.'),
     osVersion: requiredResolvedValue(
       flags.providerOsVersion,
-      'LambdaTest profile missed OS version.',
+      'TestMu AI profile missed OS version.',
     ),
-    app: requiredResolvedValue(flags.providerApp, 'LambdaTest profile missed app.'),
+    app: requiredResolvedValue(flags.providerApp, 'TestMu AI profile missed app.'),
   });
 }
 
