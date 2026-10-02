@@ -84,6 +84,20 @@ test('a configured lt:options merges per key and a pinned Appium version wins ov
   assert.equal('appium:app' in capabilities, false);
 });
 
+test('a configured lt:options cannot turn off the W3C dialect', () => {
+  const capabilities = buildTestMuCapabilities({
+    platform: 'android',
+    deviceName: 'Pixel 8',
+    osVersion: '14',
+    buildName: 'run-1',
+    sessionName: 'lease-1',
+    configured: { 'lt:options': { w3c: false, tunnel: true } },
+  });
+  const ltOptions = capabilities['lt:options'] as Record<string, unknown>;
+  assert.equal(ltOptions.w3c, true);
+  assert.equal(ltOptions.tunnel, true);
+});
+
 test('TestMu upload reads the lt:// reference and aborts while the request is in flight', async () => {
   const tempDir = await mkdtempForTest('agent-device-testmu-upload-');
   const appPath = path.join(tempDir, 'App.apk');

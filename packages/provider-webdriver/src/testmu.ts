@@ -162,7 +162,6 @@ export function buildTestMuCapabilities(
     // Merged per key, never assigned: a configured `lt:options` must not drop the labels below.
     'lt:options': {
       isRealMobile: false,
-      w3c: true,
       platformName: options.platform === 'ios' ? 'iOS' : 'Android',
       deviceName: options.deviceName,
       platformVersion: options.osVersion,
@@ -175,6 +174,8 @@ export function buildTestMuCapabilities(
       devicelog: true,
       ...deviceFeatures,
       ...asRecord(configuredLtOptions),
+      // agent-device only speaks W3C, so a configured value cannot drop it.
+      w3c: true,
     },
   };
 }
