@@ -15,6 +15,12 @@ type TestMuOptions = Extract<CloudWebDriverConnectionVerificationOptions, { prov
 
 type TestMuAuth = { username: string; accessKey: string };
 
+/** `/app/data?type=` keys uploads by pool: real-device apps by platform, virtual ones by runtime. */
+const TESTMU_APP_LIST_TYPES: Record<ProviderDeviceType, Record<'android' | 'ios', string>> = {
+  real: { android: 'android', ios: 'ios' },
+  virtual: { android: 'emulator', ios: 'simulator' },
+};
+
 /**
  * Verifies a TestMu device selection without creating a session: the public capability catalog
  * of the selected pool (real or virtual) confirms the device/OS pair exists, and the
@@ -84,22 +90,17 @@ async function verifyTestMuApp(
   const { app } = options;
   // The listing is authenticated, so it doubles as the credential check for every app kind.
   const apps = await fetchTestMuJson(
-    `${options.appsEndpoint ?? TESTMU_APPS_ENDPOINT}?type=${options.platform}&level=user`,
+    `${options.appsEndpoint ?? TESTMU_APPS_ENDPOINT}?type=${TESTMU_APP_LIST_TYPES[deviceType][options.platform]}&level=user`,
     auth,
     clientVersion,
   );
   if (isTestMuAppReference(app)) {
     const matched = readTestMuApps(apps).find((entry) => entry.reference === app);
     if (!matched) {
-      // A match is proof either way, but whether this listing includes real-device uploads is
-      // unconfirmed, so a miss for the real pool is not reported as "not found".
       return {
         status: 'configured',
         reference: app,
-        message:
-          deviceType === 'real'
-            ? 'Real-device app reference was not matched in the app listing; TestMu validates it when creating the session.'
-            : 'App reference was not found among your uploaded apps; TestMu validates it when creating the session.',
+        message: `App reference was not found among your ${deviceType}-device uploads; TestMu validates it when creating the session.`,
       };
     }
     return { status: 'verified', ...matched };

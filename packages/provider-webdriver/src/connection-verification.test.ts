@@ -247,7 +247,7 @@ test('TestMu verifies the virtual device and uploaded app without creating a ses
     fetchMock.mock.calls.map(([input]) => String(input)),
     [
       'https://testmu.test/capability/generator?isVirtualDevice=true',
-      'https://testmu.test/app/data?type=android&level=user',
+      'https://testmu.test/app/data?type=emulator&level=user',
     ],
   );
 });
@@ -462,7 +462,49 @@ test('TestMu fails typed when a catalog does not have the selected pool shape', 
   );
 });
 
-test('TestMu does not report a real-device lt:// id as missing from the app listing', async () => {
+// The listing is keyed by pool: `emulator`/`simulator` hold virtual uploads, `android`/`ios` real
+// ones, so an id must be looked up in the list of the pool the session will run on.
+test('TestMu checks an lt:// id against the app list of the selected pool and platform', async () => {
+  const cases = [
+    { deviceType: 'virtual', platform: 'android', deviceName: 'Pixel 8', listType: 'emulator' },
+    { deviceType: 'virtual', platform: 'ios', deviceName: 'iPhone 16', listType: 'simulator' },
+    { deviceType: 'real', platform: 'android', deviceName: 'Pixel 6', listType: 'android' },
+    { deviceType: 'real', platform: 'ios', deviceName: 'iPhone 16', listType: 'ios' },
+  ] as const;
+  for (const { deviceType, platform, deviceName, listType } of cases) {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes('capability/generator')) {
+        return jsonResponse(deviceType === 'real' ? testMuRealCatalog : testMuCatalog);
+      }
+      return jsonResponse({
+        data: new URL(url).searchParams.get('type') === listType ? [{ app_id: 'APP1' }] : [],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await createProvider().verifyConnection({
+      ...testMuOptions,
+      deviceType,
+      platform,
+      deviceName,
+      osVersion:
+        deviceType === 'real'
+          ? platform === 'ios'
+            ? '18'
+            : '14'
+          : platform === 'ios'
+            ? '18.0'
+            : '14',
+    });
+    assert.equal(result.app.status, 'verified', `${deviceType} ${platform}`);
+    assert.equal(
+      String(fetchMock.mock.calls[1]?.[0]),
+      `https://testmu.test/app/data?type=${listType}&level=user`,
+    );
+  }
+});
+
+test('TestMu defers a real-device lt:// id missing from the real-device app list', async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn<typeof fetch>(async (input) =>
@@ -477,7 +519,7 @@ test('TestMu does not report a real-device lt:// id as missing from the app list
     deviceName: 'Pixel 6',
   });
   assert.equal(result.app.status, 'configured');
-  assert.match(String(result.app.message), /Real-device app reference was not matched/);
+  assert.match(String(result.app.message), /not found among your real-device uploads/);
   assert.equal(
     result.verificationMessage,
     'Credentials and real device verified; app availability is checked when the session is created.',
