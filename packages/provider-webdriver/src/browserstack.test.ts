@@ -4,7 +4,11 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveBrowserStackAppReference, uploadBrowserStackApp } from './browserstack.ts';
+import {
+  listBrowserStackCloudArtifacts,
+  resolveBrowserStackAppReference,
+  uploadBrowserStackApp,
+} from './browserstack.ts';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 const realFetch = globalThis.fetch;
@@ -98,5 +102,35 @@ test('BrowserStack passes bs:// ids and URLs to the hub and uploads only local p
     });
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('BrowserStack session details lookup has a deadline and fails typed', async () => {
+  const lookup = async () =>
+    await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', upload);
+  const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  const transportFailures: unknown[] = [timeout, new TypeError('fetch failed')];
+  for (const failure of transportFailures) {
+    globalThis.fetch = async (_input, init) => {
+      assert.ok(init?.signal instanceof AbortSignal);
+      throw failure;
+    };
+    await assert.rejects(lookup(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'BrowserStack session details lookup failed.');
+      assert.equal(error.cause, failure);
+      return true;
+    });
+  }
+
+  for (const body of ['<html>gateway</html>', '[]']) {
+    globalThis.fetch = async () => new Response(body, { status: 200 });
+    await assert.rejects(lookup(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.status, 200);
+      return true;
+    });
   }
 });

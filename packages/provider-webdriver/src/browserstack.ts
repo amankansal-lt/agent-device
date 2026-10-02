@@ -159,8 +159,7 @@ async function fetchBrowserStackSessionDetails(
     auth: options,
     service: 'BrowserStack',
   });
-  const details = (json as { automation_session?: unknown }).automation_session ?? json;
-  return details && typeof details === 'object' ? (details as Record<string, unknown>) : {};
+  return asRecord(json.automation_session) ?? json;
 }
 
 function mapBrowserStackArtifacts(

@@ -161,6 +161,8 @@ export async function resolveHubAppReference(options: {
   return await options.uploadFile(appPath, options.signal);
 }
 
+const PROVIDER_API_TIMEOUT_MS = 15_000;
+
 /** The provider rejected or could not answer a verification call; typed so callers never sniff text. */
 export type ProviderJsonFailureHints = {
   service: string;
@@ -188,14 +190,19 @@ export async function fetchProviderVerificationJson(
         ...agentDeviceRequestHeaders(options.clientVersion),
         ...(options.auth ? { Authorization: basicAuthHeader(options.auth) } : {}),
       },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(PROVIDER_API_TIMEOUT_MS),
     });
     if (!response.ok) {
       const unauthorized = response.status === 401 || response.status === 403;
       throw new AppError(
         unauthorized ? 'UNAUTHORIZED' : 'COMMAND_FAILED',
         `${service} rejected connection verification.`,
-        { status: response.status, hint: unauthorized ? unauthorizedHint : networkHint },
+        {
+          status: response.status,
+          hint: unauthorized
+            ? unauthorizedHint
+            : `Retry connect or check the ${service} service status.`,
+        },
       );
     }
     return (await response.json()) as unknown;
@@ -210,16 +217,18 @@ export async function fetchProviderVerificationJson(
   }
 }
 
-/** Fetches a provider's session-details JSON with basic auth, failing typed on a non-2xx or non-object body. */
+/**
+ * Fetches a provider's session-details JSON with basic auth under a deadline. A transport failure,
+ * a non-2xx answer, or a body that is not a JSON object is `COMMAND_FAILED`.
+ */
 export async function fetchProviderSessionDetails(
   endpoint: string | URL,
   options: {
     clientVersion: string;
     auth: { username: string; accessKey: string };
     service: string;
-    timeoutMs?: number;
   },
-): Promise<unknown> {
+): Promise<Record<string, unknown>> {
   let response: Response;
   let json: unknown;
   try {
@@ -228,14 +237,10 @@ export async function fetchProviderSessionDetails(
         ...agentDeviceRequestHeaders(options.clientVersion),
         Authorization: basicAuthHeader(options.auth),
       },
-      ...(options.timeoutMs === undefined
-        ? {}
-        : { signal: AbortSignal.timeout(options.timeoutMs) }),
+      signal: AbortSignal.timeout(PROVIDER_API_TIMEOUT_MS),
     });
     json = await readProviderJsonBody(response);
   } catch (error) {
-    // Only callers that opted into a timeout get the typed failure; others keep their raw error.
-    if (options.timeoutMs === undefined) throw error;
     throw new AppError(
       'COMMAND_FAILED',
       `${options.service} session details lookup failed.`,
@@ -243,13 +248,14 @@ export async function fetchProviderSessionDetails(
       error,
     );
   }
-  if (!response.ok || !json || typeof json !== 'object') {
+  const details = asRecord(json);
+  if (!response.ok || !details) {
     throw new AppError('COMMAND_FAILED', `${options.service} session details lookup failed.`, {
       status: response.status,
       response: json,
     });
   }
-  return json;
+  return details;
 }
 
 /** A provider response body parsed as JSON, or `undefined` when it is empty or not JSON (a gateway error page). */
