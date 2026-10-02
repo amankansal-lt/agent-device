@@ -224,11 +224,16 @@ function mapTestMuArtifacts(
   providerSessionId: string,
   details: Record<string, unknown>,
 ): CloudArtifact[] {
+  // Virtual-device sessions report the device log as `console_logs_url`.
+  const deviceLogField =
+    typeof details.console_logs_url === 'string' && details.console_logs_url.length > 0
+      ? 'console_logs_url'
+      : 'device_logs_url';
   const fromDetails = (
     [
       ['video_url', 'video', 'Session video'],
       ['appium_logs_url', 'appium-log', 'Appium logs'],
-      ['device_logs_url', 'device-log', 'Device logs'],
+      [deviceLogField, 'device-log', 'Device logs'],
       ['network_logs_url', 'raw', 'Network logs'],
       ['command_logs_url', 'automation-log', 'Command logs'],
       ['screenshot_url', 'raw', 'Screenshots'],

@@ -223,6 +223,38 @@ test('TestMu artifacts come from the jsend session payload and stay pending unti
   assert.deepEqual(pending?.cloudArtifacts, []);
 });
 
+// Virtual-device session details carry the device log as `console_logs_url`.
+test('TestMu reads the console log as the device log and falls back to device_logs_url', async () => {
+  globalThis.fetch = async () =>
+    jsonResponse({
+      status: 'success',
+      data: {
+        console_logs_url: 'https://api.test/sessions/SESSION1/log/console',
+        device_logs_url: 'https://api.test/sessions/SESSION1/log/device',
+      },
+    });
+  const consoleLog = await listTestMuCloudArtifacts('testmu', 'SESSION1', auth);
+  assert.deepEqual(
+    consoleLog?.cloudArtifacts
+      .filter((artifact) => artifact.kind === 'device-log')
+      .map((artifact) => artifact.url),
+    ['https://api.test/sessions/SESSION1/log/console'],
+  );
+
+  globalThis.fetch = async () =>
+    jsonResponse({
+      status: 'success',
+      data: { device_logs_url: 'https://api.test/sessions/SESSION1/log/device' },
+    });
+  const deviceLog = await listTestMuCloudArtifacts('testmu', 'SESSION1', auth);
+  assert.deepEqual(
+    deviceLog?.cloudArtifacts
+      .filter((artifact) => artifact.kind === 'device-log')
+      .map((artifact) => artifact.url),
+    ['https://api.test/sessions/SESSION1/log/device'],
+  );
+});
+
 test('TestMu session details read as pending on 404 and fail typed on a body that is not JSON', async () => {
   let signal: AbortSignal | undefined;
   globalThis.fetch = async (_input, init) => {
