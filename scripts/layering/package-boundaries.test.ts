@@ -756,6 +756,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...providerWebDriverPackage.exportTargets.keys()].sort(), [
     '@agent-device/provider-webdriver',
     '@agent-device/provider-webdriver/providers',
+    '@agent-device/provider-webdriver/testmu-device-features',
   ]);
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',

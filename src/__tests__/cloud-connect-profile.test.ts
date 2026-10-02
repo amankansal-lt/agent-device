@@ -787,6 +787,88 @@ test('connect aws-device-farm rejects BrowserStack-only device-feature flags', (
   }
 });
 
+test('connect testmu generates a local provider profile and verifies the virtual device', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LT_USERNAME', 'lt-user');
+  vi.stubEnv('LT_ACCESS_KEY', 'lt-key');
+
+  try {
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      positionals: ['testmu'],
+      flags: {
+        platform: 'ios',
+        device: 'iPhone 16',
+        providerOsVersion: '18.0',
+        providerApp: 'lt://APP1',
+        providerBuild: 'build-a',
+      },
+    });
+
+    assert.deepEqual(mockedVerifyWebDriverConnection.mock.calls[0]?.[0], {
+      provider: 'testmu',
+      username: 'lt-user',
+      accessKey: 'lt-key',
+      platform: 'ios',
+      deviceName: 'iPhone 16',
+      osVersion: '18.0',
+      app: 'lt://APP1',
+    });
+    const state = readRequiredActiveState(stateDir);
+    assert.equal(state.tenant, 'testmu');
+    assert.equal(state.leaseProvider, 'testmu');
+    assert.match(state.remoteConfigPath, /generated\/testmu-[a-f0-9]{16}\.json$/);
+    const generated = readGeneratedConfig(state.remoteConfigPath);
+    assert.equal(generated.providerApp, 'lt://APP1');
+    assert.equal(generated.providerOsVersion, '18.0');
+    assert.equal(generated.providerBuild, 'build-a');
+    assert.equal(JSON.stringify(generated).includes('lt-key'), false);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect testmu rejects BrowserStack network and re-sign flags before saving a profile', () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-reject-');
+
+  try {
+    assert.throws(
+      () =>
+        resolveCloudWebDriverConnectProfile({
+          provider: 'testmu',
+          stateDir: path.join(tempRoot, '.state'),
+          cwd: tempRoot,
+          env: { LT_USERNAME: 'lt-user', LT_ACCESS_KEY: 'lt-key' },
+          flags: {
+            json: false,
+            help: false,
+            version: false,
+            platform: 'ios',
+            device: 'iPhone 16',
+            providerOsVersion: '18.0',
+            providerApp: 'lt://APP1',
+            providerNetworkProfile: '3g-lossy',
+            providerNoResignApp: true,
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.match(error.message, /not supported by TestMu/);
+        assert.deepEqual(error.details?.flags, [
+          '--provider-network-profile',
+          '--provider-no-resign-app',
+        ]);
+        return true;
+      },
+    );
+    assert.equal(fs.existsSync(path.join(tempRoot, '.state')), false);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 function mockCloudConnectionProfile(connection: Record<string, unknown>): ReturnType<typeof vi.fn> {
   mockedResolveCloudAccessForConnect.mockResolvedValue({
     accessToken: 'adc_agent_cloud',

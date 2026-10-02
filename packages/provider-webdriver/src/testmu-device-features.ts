@@ -70,8 +70,9 @@ export function buildTestMuDeviceFeatureCapabilities(
 }
 
 /**
- * Fails when flags TestMu cannot act on were given. Called from both the CLI profile builder and
- * session preparation, since the typed client and hand-authored profiles skip `connect`.
+ * Fails when flags TestMu cannot act on were given. Called from both `connect testmu` (through the
+ * `./testmu-device-features` subpath, so the package entry stays lazy) and session preparation,
+ * since the typed client and hand-authored profiles skip `connect`.
  */
 export function rejectUnsupportedTestMuDeviceFeatures(
   flags: Record<string, unknown> | undefined,

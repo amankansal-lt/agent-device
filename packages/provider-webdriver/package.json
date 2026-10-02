@@ -19,6 +19,10 @@
     "./providers": {
       "types": "./src/providers.ts",
       "default": "./src/providers.ts"
+    },
+    "./testmu-device-features": {
+      "types": "./src/testmu-device-features.ts",
+      "default": "./src/testmu-device-features.ts"
     }
   }
 }

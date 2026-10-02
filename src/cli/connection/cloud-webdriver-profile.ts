@@ -4,6 +4,7 @@ import {
   rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
+import { rejectUnsupportedTestMuDeviceFeatures } from '@agent-device/provider-webdriver/testmu-device-features';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
@@ -125,6 +126,7 @@ function testMuProfileFields(options: {
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
+  rejectUnsupportedTestMuDeviceFeatures(options.flags);
   return hubProviderProfileFields(TESTMU_HUB_PROFILE, options);
 }
 
