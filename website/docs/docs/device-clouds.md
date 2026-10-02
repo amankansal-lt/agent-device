@@ -8,10 +8,11 @@ description: Choose a hosted device provider for agent and CI workflows.
 Use a device cloud or farm when an agent needs to automate a hosted mobile device without interactive login. Pick the provider that owns the devices and credentials you use:
 
 - [BrowserStack](/docs/browserstack): Android and iOS App Automate sessions over WebDriver.
+- [LambdaTest](/docs/lambdatest): Android emulator and iOS simulator App Automation sessions over WebDriver.
 - [AWS Device Farm](/docs/aws-device-farm): Android and iOS remote-access sessions through AWS.
 - [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances.
 
-All three integrations run through the local `agent-device` daemon. `connect` checks the credentials and configuration, then saves non-secret connection state. It does not allocate a device. BrowserStack and AWS Device Farm allocate a hosted session on `open`. Limrun allocates an instance on the first device command, such as `install` or `open`.
+All four integrations run through the local `agent-device` daemon. `connect` checks the credentials and configuration, then saves non-secret connection state. It does not allocate a device. BrowserStack, LambdaTest, and AWS Device Farm allocate a hosted session on `open`. Limrun allocates an instance on the first device command, such as `install` or `open`.
 
 For each provider, the standard lifecycle is:
 

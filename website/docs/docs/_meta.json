@@ -110,6 +110,11 @@
       },
       {
         "type": "custom-link",
+        "label": "LambdaTest",
+        "link": "/docs/lambdatest"
+      },
+      {
+        "type": "custom-link",
         "label": "AWS Device Farm",
         "link": "/docs/aws-device-farm"
       },
