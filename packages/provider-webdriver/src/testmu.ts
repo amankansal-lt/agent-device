@@ -8,6 +8,7 @@ import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact
 import {
   basicAuthHeader,
   fetchProviderSessionDetails,
+  readProviderJsonBody,
   trimTrailingSlash,
 } from './webdriver-utils.ts';
 
@@ -20,6 +21,7 @@ const TESTMU_APP_UPLOAD_ENDPOINT = 'https://manual-api.lambdatest.com/app/upload
 export const TESTMU_APPS_ENDPOINT = 'https://manual-api.lambdatest.com/app/data';
 export const TESTMU_API_ENDPOINT = 'https://mobile-api.lambdatest.com/mobile-automation/api/v1';
 const TESTMU_DASHBOARD_TEST_URL = 'https://appautomation.lambdatest.com/test?testID=';
+const TESTMU_API_TIMEOUT_MS = 15_000;
 /** The Appium alias TestMu resolves to the newest server it hosts for the selected OS version. */
 export const TESTMU_DEFAULT_APPIUM_VERSION = 'latest';
 
@@ -108,7 +110,7 @@ async function postTestMuUpload(
     body: form,
     signal,
   });
-  const json = (await response.json()) as unknown;
+  const json = await readProviderJsonBody(response);
   const appUrl = readTestMuAppReference(json);
   if (!response.ok || !appUrl) {
     throw new AppError('COMMAND_FAILED', 'TestMu app upload failed.', {
@@ -187,14 +189,27 @@ async function fetchTestMuSessionDetails(
   const endpoint = new URL(
     `${trimTrailingSlash(String(options.endpoint ?? TESTMU_API_ENDPOINT))}/sessions/${encodeURIComponent(sessionId)}`,
   );
-  const json = await fetchProviderSessionDetails(endpoint, {
-    clientVersion: options.clientVersion,
-    auth: options,
-    service: 'TestMu',
-  });
+  let json: unknown;
+  try {
+    json = await fetchProviderSessionDetails(endpoint, {
+      clientVersion: options.clientVersion,
+      auth: options,
+      service: 'TestMu',
+      timeoutMs: TESTMU_API_TIMEOUT_MS,
+    });
+  } catch (error) {
+    // Details are published a little after the session ends; until then the API answers 404.
+    if (error instanceof AppError && error.details?.status === 404) return {};
+    throw error;
+  }
   // The API wraps the session in a jsend envelope: `{ status, data: {...}, message }`.
-  const details = (json as { data?: unknown }).data ?? json;
-  return details && typeof details === 'object' ? (details as Record<string, unknown>) : {};
+  const details = (json as { data?: unknown }).data;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    throw new AppError('COMMAND_FAILED', 'TestMu session details response had no data.', {
+      response: json,
+    });
+  }
+  return details as Record<string, unknown>;
 }
 
 function mapTestMuArtifacts(

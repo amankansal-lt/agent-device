@@ -201,6 +201,56 @@ test('TestMu artifacts come from the jsend session payload and stay pending unti
   assert.deepEqual(pending?.cloudArtifacts, []);
 });
 
+test('TestMu session details read as pending on 404 and fail typed on a body that is not JSON', async () => {
+  let signal: AbortSignal | undefined;
+  globalThis.fetch = async (_input, init) => {
+    signal = init?.signal ?? undefined;
+    return jsonResponse({ status: 'fail', message: 'session not found' }, 404);
+  };
+  const notFound = await listTestMuCloudArtifacts('testmu', 'SESSION1', auth);
+  assert.equal(notFound?.status, 'pending');
+  assert.deepEqual(notFound?.cloudArtifacts, []);
+  assert.ok(signal instanceof AbortSignal, 'session details lookup should carry a timeout');
+
+  globalThis.fetch = async () => new Response('<html>Bad Gateway</html>', { status: 502 });
+  await assert.rejects(
+    listTestMuCloudArtifacts('testmu', 'SESSION1', auth),
+    (error: unknown) =>
+      error instanceof AppError && error.code === 'COMMAND_FAILED' && error.details?.status === 502,
+  );
+
+  globalThis.fetch = async () => new Response('', { status: 200 });
+  await assert.rejects(
+    listTestMuCloudArtifacts('testmu', 'SESSION1', auth),
+    (error: unknown) =>
+      error instanceof AppError && error.code === 'COMMAND_FAILED' && error.details?.status === 200,
+  );
+});
+
+test('TestMu session details require the jsend data envelope', async () => {
+  globalThis.fetch = async () => jsonResponse({ video_url: 'https://cdn.test/video.mp4' });
+  await assert.rejects(
+    listTestMuCloudArtifacts('testmu', 'SESSION1', auth),
+    (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+  );
+});
+
+test('TestMu upload reports the HTTP status when the response is not JSON', async () => {
+  globalThis.fetch = async () => new Response('<html>Bad Gateway</html>', { status: 502 });
+  await assert.rejects(
+    uploadTestMuAppFromUrl('https://example.test/builds/App.apk', auth),
+    (error: unknown) =>
+      error instanceof AppError && error.code === 'COMMAND_FAILED' && error.details?.status === 502,
+  );
+
+  globalThis.fetch = async () => new Response('', { status: 200 });
+  await assert.rejects(
+    uploadTestMuAppFromUrl('https://example.test/builds/App.apk', auth),
+    (error: unknown) =>
+      error instanceof AppError && error.code === 'COMMAND_FAILED' && error.details?.status === 200,
+  );
+});
+
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status });
 }

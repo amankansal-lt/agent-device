@@ -112,6 +112,7 @@ export async function fetchProviderSessionDetails(
     clientVersion: string;
     auth: { username: string; accessKey: string };
     service: string;
+    timeoutMs?: number;
   },
 ): Promise<unknown> {
   const response = await fetch(endpoint, {
@@ -119,8 +120,9 @@ export async function fetchProviderSessionDetails(
       ...agentDeviceRequestHeaders(options.clientVersion),
       Authorization: basicAuthHeader(options.auth),
     },
+    ...(options.timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(options.timeoutMs) }),
   });
-  const json = (await response.json()) as unknown;
+  const json = await readProviderJsonBody(response);
   if (!response.ok || !json || typeof json !== 'object') {
     throw new AppError('COMMAND_FAILED', `${options.service} session details lookup failed.`, {
       status: response.status,
@@ -128,6 +130,17 @@ export async function fetchProviderSessionDetails(
     });
   }
   return json;
+}
+
+/** A provider response body parsed as JSON, or `undefined` when it is empty or not JSON (a gateway error page). */
+export async function readProviderJsonBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text.length === 0) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 /** `1.0` and `1` name the same OS release on BrowserStack's catalog; TestMu's hub matches spellings exactly. */
