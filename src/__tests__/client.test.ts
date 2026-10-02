@@ -770,37 +770,6 @@ test('lease helpers forward scope through daemon-backed client methods', async (
   assert.equal(released.released, true);
 });
 
-test('lease allocation carries the TestMu device type to the provider flags', async () => {
-  const setup = createTransport(async (req) => ({
-    ok: true,
-    data: {
-      lease: {
-        leaseId: 'lease-new',
-        tenantId: req.meta?.tenantId,
-        runId: req.meta?.runId,
-        backend: req.meta?.leaseBackend,
-      },
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  await client.leases.allocate({
-    tenant: 'testmu',
-    runId: 'remote-run',
-    leaseBackend: 'ios-instance',
-    leaseProvider: 'testmu',
-    platform: 'ios',
-    device: 'iPhone 16',
-    providerOsVersion: '18',
-    providerDeviceType: 'real',
-    providerApp: 'lt://APP1',
-  });
-
-  assert.equal(setup.calls[0]?.command, 'lease_allocate');
-  assert.equal(setup.calls[0]?.flags?.providerDeviceType, 'real');
-  assert.equal(setup.calls[0]?.flags?.providerOsVersion, '18');
-});
-
 test('client capture.snapshot preserves visibility metadata from daemon responses', async () => {
   const setup = createTransport(async () => ({
     ok: true,

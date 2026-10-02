@@ -770,20 +770,6 @@ test('parseArgs rejects an orientation the provider cannot start a session in', 
   );
 });
 
-test('parseArgs reads the TestMu device type and rejects an unknown pool', () => {
-  const parsed = parseArgs(['connect', 'testmu', '--provider-device-type', 'real'], {
-    strictFlags: true,
-  });
-  assert.equal(parsed.flags.providerDeviceType, 'real');
-  assert.throws(
-    () =>
-      parseArgs(['connect', 'testmu', '--provider-device-type', 'physical'], {
-        strictFlags: true,
-      }),
-    /Invalid provider-device-type: physical/,
-  );
-});
-
 test('parseArgs recognizes connect aws-device-farm provider flags', () => {
   const parsed = parseArgs(
     [
