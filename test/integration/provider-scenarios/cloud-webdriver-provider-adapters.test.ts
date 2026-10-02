@@ -185,6 +185,83 @@ test('AWS Device Farm facade rejects BrowserStack-owned device features at sessi
   });
 }, 15_000);
 
+test('TestMu facade routes a real-device session to the real pool and its upload API', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const provider = createProviderWebDriver({
+      clientVersion: CLIENT_VERSION,
+      runHostCommand: unexpectedHostCommand,
+    });
+    const runtime = runtimeFor(
+      provider.createDefaultRuntimes({
+        LT_USERNAME: 'user',
+        LT_ACCESS_KEY: 'key',
+        TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+        TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+        TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
+      }),
+      CLOUD_WEBDRIVER_PROVIDERS.testMu,
+    );
+    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.testMu);
+    try {
+      await runtime.leaseLifecycle.allocate?.(lease, {
+        flags: {
+          platform: 'android',
+          device: 'Pixel 6',
+          providerOsVersion: '14',
+          providerDeviceType: 'real',
+          providerApp: 'https://builds.example/app.apk',
+        },
+      });
+    } finally {
+      await runtime.shutdown();
+    }
+
+    assert.deepEqual(
+      server.calls.filter((call) => call.path.startsWith('/lt/upload/')).map((call) => call.path),
+      ['/lt/upload/realDevice'],
+    );
+    const session = server.calls.find((call) => call.path === '/wd/hub/session');
+    const alwaysMatch = (
+      session?.body as { capabilities?: { alwaysMatch?: Record<string, unknown> } } | undefined
+    )?.capabilities?.alwaysMatch;
+    const ltOptions = alwaysMatch?.['lt:options'] as Record<string, unknown> | undefined;
+    assert.equal(ltOptions?.isRealMobile, true);
+    assert.equal(ltOptions?.app, 'lt://REAL1');
+    assert.equal(ltOptions?.platformVersion, '14');
+  });
+}, 15_000);
+
+test('BrowserStack facade rejects the TestMu device type at session preparation', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const provider = createProviderWebDriver({
+      clientVersion: CLIENT_VERSION,
+      runHostCommand: unexpectedHostCommand,
+    });
+    const runtime = runtimeFor(
+      provider.createDefaultRuntimes({
+        BROWSERSTACK_USERNAME: 'user',
+        BROWSERSTACK_ACCESS_KEY: 'key',
+        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      }),
+      CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    );
+    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack);
+    const context = browserStackContext(lease);
+    try {
+      await assert.rejects(
+        async () =>
+          await runtime.leaseLifecycle.allocate?.(lease, {
+            flags: { ...context.flags, providerDeviceType: 'real' },
+          }),
+        /--provider-device-type is only supported by TestMu AI, not browserstack/,
+      );
+      assert.deepEqual(server.calls, []);
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+}, 15_000);
+
 test('AWS Device Farm facade uses the injected host-command capability for its full lifecycle', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
@@ -518,6 +595,10 @@ class FakeCloudProviderServer extends CloudWebDriverTestServer {
         });
       case 'POST /app-automate/upload':
         return cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' });
+      case 'POST /lt/upload/realDevice':
+        return cloudWebDriverTestJson({ app_url: 'lt://REAL1' });
+      case 'POST /lt/upload/virtualDevice':
+        return cloudWebDriverTestJson({ app_url: 'lt://VIRTUAL1' });
       case 'GET /app-automate/sessions/wd-1.json':
         return cloudWebDriverTestJson({
           automation_session: {
