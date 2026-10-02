@@ -319,6 +319,29 @@ test('TestMu upload reports the HTTP status when the response is not JSON', asyn
   );
 });
 
+test('TestMu session details lookup types a timeout and a network failure', async () => {
+  const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  globalThis.fetch = async () => {
+    throw timeout;
+  };
+  await assert.rejects(listTestMuCloudArtifacts('testmu', 'SESSION1', auth), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.match(error.message, /TestMu session details lookup failed/);
+    assert.match(String(error.details?.hint), /retry/);
+    assert.equal(error.cause, timeout);
+    return true;
+  });
+
+  globalThis.fetch = async () => {
+    throw new TypeError('fetch failed');
+  };
+  await assert.rejects(
+    listTestMuCloudArtifacts('testmu', 'SESSION1', auth),
+    (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+  );
+});
+
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status });
 }

@@ -115,14 +115,29 @@ export async function fetchProviderSessionDetails(
     timeoutMs?: number;
   },
 ): Promise<unknown> {
-  const response = await fetch(endpoint, {
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options.auth),
-    },
-    ...(options.timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(options.timeoutMs) }),
-  });
-  const json = await readProviderJsonBody(response);
+  let response: Response;
+  let json: unknown;
+  try {
+    response = await fetch(endpoint, {
+      headers: {
+        ...agentDeviceRequestHeaders(options.clientVersion),
+        Authorization: basicAuthHeader(options.auth),
+      },
+      ...(options.timeoutMs === undefined
+        ? {}
+        : { signal: AbortSignal.timeout(options.timeoutMs) }),
+    });
+    json = await readProviderJsonBody(response);
+  } catch (error) {
+    // Only callers that opted into a timeout get the typed failure; others keep their raw error.
+    if (options.timeoutMs === undefined) throw error;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `${options.service} session details lookup failed.`,
+      { hint: `Check network access to the ${options.service} API, then retry.` },
+      error,
+    );
+  }
   if (!response.ok || !json || typeof json !== 'object') {
     throw new AppError('COMMAND_FAILED', `${options.service} session details lookup failed.`, {
       status: response.status,
