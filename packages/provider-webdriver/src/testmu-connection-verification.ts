@@ -32,12 +32,11 @@ export async function verifyTestMuConnection(
 ): Promise<CloudWebDriverConnectionVerification> {
   const auth = { username: options.username, accessKey: options.accessKey };
   const deviceType = options.deviceType ?? 'virtual';
-  const catalog = await fetchTestMuJson(
-    options.devicesEndpoint ??
-      `${trimTrailingSlash(String(options.apiEndpoint ?? TESTMU_API_ENDPOINT))}/capability/generator?isVirtualDevice=${deviceType === 'virtual'}`,
-    undefined,
-    clientVersion,
-  );
+  const catalogUrl = options.devicesEndpoint
+    ? new URL(options.devicesEndpoint)
+    : apiUrl(options.apiEndpoint ?? TESTMU_API_ENDPOINT, 'capability/generator');
+  catalogUrl.searchParams.set('isVirtualDevice', String(deviceType === 'virtual'));
+  const catalog = await fetchTestMuJson(catalogUrl, undefined, clientVersion);
   const namedDevices = readTestMuCatalogDevices(catalog, options.platform, deviceType).filter(
     (device) => device.name === options.deviceName,
   );
@@ -89,11 +88,10 @@ async function verifyTestMuApp(
 ): Promise<ProviderConnectionResource> {
   const { app } = options;
   // The listing is authenticated, so it doubles as the credential check for every app kind.
-  const apps = await fetchTestMuJson(
-    `${options.appsEndpoint ?? TESTMU_APPS_ENDPOINT}?type=${TESTMU_APP_LIST_TYPES[deviceType][options.platform]}&level=user`,
-    auth,
-    clientVersion,
-  );
+  const appsUrl = new URL(options.appsEndpoint ?? TESTMU_APPS_ENDPOINT);
+  appsUrl.searchParams.set('type', TESTMU_APP_LIST_TYPES[deviceType][options.platform]);
+  appsUrl.searchParams.set('level', 'user');
+  const apps = await fetchTestMuJson(appsUrl, auth, clientVersion);
   if (isTestMuAppReference(app)) {
     const matched = readTestMuApps(apps).find((entry) => entry.reference === app);
     if (!matched) {
@@ -118,6 +116,13 @@ async function verifyTestMuApp(
     reference: app,
     message: 'Local app artifact is ready and will be uploaded when creating the session.',
   };
+}
+
+/** Appends `route` to the base's path; the base may carry a query, which is kept. */
+function apiUrl(base: string | URL, route: string): URL {
+  const url = new URL(base);
+  url.pathname = `${trimTrailingSlash(url.pathname)}/${route}`;
+  return url;
 }
 
 async function fetchTestMuJson(

@@ -272,6 +272,36 @@ test('TestMu checks the catalog of the configured API endpoint', async () => {
   );
 });
 
+test('TestMu keeps the query of an overridden endpoint and adds its own filters', async () => {
+  const fetchMock = vi.fn<typeof fetch>(async (input) =>
+    String(input).includes('capability/generator')
+      ? jsonResponse(testMuCatalog)
+      : jsonResponse({ data: [{ app_id: 'APP1' }] }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const { devicesEndpoint: _devicesEndpoint, ...options } = testMuOptions;
+
+  await createProvider().verifyConnection({
+    ...options,
+    apiEndpoint: 'https://staging.testmu.test/api/v1/?region=eu',
+    appsEndpoint: 'https://staging.testmu.test/app/data?org=42',
+  });
+  await createProvider().verifyConnection({
+    ...testMuOptions,
+    devicesEndpoint: 'https://testmu.test/capability/generator?region=eu',
+  });
+
+  assert.deepEqual(
+    fetchMock.mock.calls.map(([input]) => String(input)),
+    [
+      'https://staging.testmu.test/api/v1/capability/generator?region=eu&isVirtualDevice=true',
+      'https://staging.testmu.test/app/data?org=42&type=emulator&level=user',
+      'https://testmu.test/capability/generator?region=eu&isVirtualDevice=true',
+      'https://testmu.test/app/data?type=emulator&level=user',
+    ],
+  );
+});
+
 test('TestMu rejects a device or OS version missing from the virtual-device catalog', async () => {
   vi.stubGlobal(
     'fetch',
