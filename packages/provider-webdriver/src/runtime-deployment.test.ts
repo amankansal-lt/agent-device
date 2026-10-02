@@ -157,7 +157,9 @@ test('TestMu uploads the zipped simulator build that install-from-source extract
     await fs.mkdir(installablePath, { recursive: true });
     const uploadedNames: unknown[] = [];
     globalThis.fetch = async (_input, init) => {
-      uploadedNames.push(((init?.body as FormData).get('appFile') as File).name);
+      const body = init?.body;
+      if (!(body instanceof FormData)) throw new Error('expected a multipart upload');
+      uploadedNames.push((body.get('appFile') as File).name);
       return new Response(JSON.stringify({ app_id: 'APP42' }), { status: 200 });
     };
     const installApp = vi.fn(async () => undefined);

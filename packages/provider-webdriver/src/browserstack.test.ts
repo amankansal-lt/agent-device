@@ -60,7 +60,8 @@ test('BrowserStack upload sends the file field and fails typed on a gateway erro
   try {
     await fs.writeFile(appPath, 'placeholder');
     globalThis.fetch = async (_input, init) => {
-      assert.ok((init?.body as FormData).get('file') instanceof Blob);
+      assert.ok(init?.body instanceof FormData);
+      assert.ok(init.body.get('file') instanceof Blob);
       return new Response('<html>502 Bad Gateway</html>', { status: 502 });
     };
     await assert.rejects(uploadBrowserStackApp(appPath, upload), (error: unknown) => {
