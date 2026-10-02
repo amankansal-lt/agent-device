@@ -281,6 +281,31 @@ test('TestMu passes lt:// ids through and has the upload API fetch a public URL'
   );
 });
 
+test('TestMu upload accepts only an lt:// reference or a valid app id from the response', async () => {
+  const cases: Array<[unknown, string | undefined]> = [
+    [{ app_url: 'lt://APP6' }, 'lt://APP6'],
+    [{ app_url: 'https://cdn.example/app.apk', app_id: 'APP5' }, 'lt://APP5'],
+    [{ app_id: 'lt://APP7' }, 'lt://APP7'],
+    [{ app_url: 'https://cdn.example/app.apk' }, undefined],
+    [{ app_url: 'lt://' }, undefined],
+    [{ app_id: 'bs://APP8' }, undefined],
+  ];
+  for (const [body, expected] of cases) {
+    globalThis.fetch = async () => jsonResponse(body);
+    const pending = uploadTestMuAppFromUrl('https://builds.example/App.apk', auth);
+    if (expected) {
+      assert.equal(await pending, expected);
+      continue;
+    }
+    await assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.deepEqual(error.details?.response, body);
+      return true;
+    });
+  }
+});
+
 test('TestMu URL upload hands the URL to the upload API and surfaces a failed upload', async () => {
   globalThis.fetch = async (_input, init) => {
     const body = init?.body as FormData;

@@ -265,12 +265,17 @@ function mapTestMuArtifacts(
   return ready.length > 0 ? [...ready, dashboard] : [];
 }
 
+const TESTMU_APP_ID = /^[\w.-]+$/;
+
+/** The upload answers with `app_url` (`lt://…`) and/or a bare `app_id`; anything else is a failed upload. */
 function readTestMuAppReference(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const record = value as { app_url?: unknown; app_id?: unknown };
-  if (typeof record.app_url === 'string' && record.app_url.length > 0) return record.app_url;
-  if (typeof record.app_id === 'string' && record.app_id.length > 0) {
-    return isTestMuAppReference(record.app_id) ? record.app_id : `lt://${record.app_id}`;
-  }
-  return undefined;
+  const { app_url: appUrl, app_id: appId } = asRecord(value) ?? {};
+  if (typeof appUrl === 'string' && isValidTestMuAppReference(appUrl)) return appUrl;
+  if (typeof appId !== 'string') return undefined;
+  const reference = isTestMuAppReference(appId) ? appId : `lt://${appId}`;
+  return isValidTestMuAppReference(reference) ? reference : undefined;
+}
+
+function isValidTestMuAppReference(value: string): boolean {
+  return isTestMuAppReference(value) && TESTMU_APP_ID.test(value.slice('lt://'.length));
 }
