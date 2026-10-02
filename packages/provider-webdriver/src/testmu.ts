@@ -98,6 +98,7 @@ export async function uploadTestMuAppFromUrl(
   signal?.throwIfAborted();
   const form = new FormData();
   form.set('url', url);
+  form.set('storage', 'url');
   form.set('name', path.basename(new URL(url).pathname) || 'app');
   return await postTestMuUpload(form, options, signal);
 }

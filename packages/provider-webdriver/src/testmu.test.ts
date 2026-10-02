@@ -168,6 +168,8 @@ test('TestMu URL upload hands the URL to the upload API and surfaces a failed up
   globalThis.fetch = async (_input, init) => {
     const body = init?.body as FormData;
     assert.equal(body.get('url'), 'https://example.test/builds/App.apk');
+    assert.equal(body.get('storage'), 'url');
+    assert.equal(body.get('name'), 'App.apk');
     assert.equal(body.get('appFile'), null);
     return jsonResponse({ app_url: 'lt://APP9' });
   };
