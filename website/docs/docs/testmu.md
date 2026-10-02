@@ -1,13 +1,14 @@
 ---
 title: TestMu
-description: Drive TestMu (LambdaTest) virtual devices, Android emulators and iOS simulators, with agent-device.
+description: Drive TestMu (LambdaTest) virtual devices, Android emulators and iOS simulators, and real devices with agent-device.
 ---
 
 # TestMu
 
-Use TestMu virtual devices for hosted Android emulator and iOS simulator WebDriver sessions. TestMu
-(formerly LambdaTest) fronts both with the same Appium hub its real devices use; agent-device
-selects the virtual-device pool with `isRealMobile: false`.
+Use TestMu virtual devices for hosted Android emulator and iOS simulator WebDriver sessions, or
+TestMu real devices with `--provider-device-type real`. TestMu (formerly LambdaTest) fronts both
+pools with one Appium hub; agent-device selects the pool with `isRealMobile` and defaults to the
+virtual-device pool.
 
 ## Credentials and connection
 
@@ -73,6 +74,40 @@ TestMu receives these values in `lt:options` when it creates the hosted session.
 - Session video and device logs are requested on every session so `artifacts` has something to
   return.
 
+## Real devices
+
+Pass `--provider-device-type real` to run on a physical device. Everything else works as for
+virtual devices: `connect` checks the device/OS pair against the real-device catalog
+(`/capability/generator?isVirtualDevice=false`), and a local path or URL is uploaded through the
+real-device upload API.
+
+```bash
+agent-device connect testmu \
+  --provider-device-type real \
+  --platform ios \
+  --device "iPhone 16" \
+  --provider-os-version 18 \
+  --provider-app ./MyApp.ipa
+
+agent-device connect testmu \
+  --provider-device-type real \
+  --platform android \
+  --device "Pixel 6" \
+  --provider-os-version 14 \
+  --provider-app https://example.com/builds/app.apk
+```
+
+- Real iOS devices are listed by major OS version only: use `--provider-os-version 18`, not `18.0`.
+  The exact-spelling check still applies, so `connect` rejects `18.0` for a real iPhone 16 and lists
+  the versions it offers.
+- Real iOS devices install a signed `.ipa`; a zipped simulator `.app` only runs on simulators.
+  Android takes an `.apk` or `.aab`.
+- Real and virtual devices have separate upload APIs. Pass an `lt://` id that was uploaded for the
+  pool you connect to; when in doubt, pass the local path or URL and let agent-device upload it.
+- `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` redirects real-device uploads, as
+  `TESTMU_APP_UPLOAD_ENDPOINT` does for virtual-device uploads.
+- `--provider-device-type` is TestMu-only; other providers refuse it.
+
 ## CLI workflow
 
 ```bash
@@ -103,7 +138,8 @@ provider `connect` commands.
 The typed client reaches TestMu through a lease. Allocate one with the provider selectors, then
 scope a client to it for normal commands. `sessions.close()` ends the hosted session and releases
 the lease; `leases.release()` in `finally` is then a no-op, and still releases the lease when a
-command fails first. The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment.
+command fails first. The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment. Add
+`providerDeviceType: 'real'` to `leases.allocate` to run on a real device.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -157,7 +193,8 @@ The TestMu session id is the WebDriver session id. If artifact lookup is pending
 `close`, retry it; TestMu finalizes video and log URLs after the session ends.
 
 Endpoints can be redirected for a staging or private TestMu deployment with
-`TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT`, and `TESTMU_API_ENDPOINT`.
+`TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT` (virtual devices),
+`TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` (real devices), and `TESTMU_API_ENDPOINT`.
 
 On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If
 it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target, or
