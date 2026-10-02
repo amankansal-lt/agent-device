@@ -252,6 +252,26 @@ test('TestMu verifies the virtual device and uploaded app without creating a ses
   );
 });
 
+test('TestMu checks the catalog of the configured API endpoint', async () => {
+  const fetchMock = vi.fn<typeof fetch>(async (input) =>
+    String(input).includes('capability/generator')
+      ? jsonResponse(testMuCatalog)
+      : jsonResponse({ data: [{ app_id: 'APP1' }] }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const { devicesEndpoint: _devicesEndpoint, ...options } = testMuOptions;
+
+  await createProvider().verifyConnection({
+    ...options,
+    apiEndpoint: 'https://staging.testmu.test/mobile-automation/api/v1/',
+  });
+
+  assert.equal(
+    String(fetchMock.mock.calls[0]?.[0]),
+    'https://staging.testmu.test/mobile-automation/api/v1/capability/generator?isVirtualDevice=true',
+  );
+});
+
 test('TestMu rejects a device or OS version missing from the virtual-device catalog', async () => {
   vi.stubGlobal(
     'fetch',

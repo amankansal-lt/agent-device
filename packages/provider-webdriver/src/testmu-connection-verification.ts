@@ -34,7 +34,7 @@ export async function verifyTestMuConnection(
   const deviceType = options.deviceType ?? 'virtual';
   const catalog = await fetchTestMuJson(
     options.devicesEndpoint ??
-      `${trimTrailingSlash(TESTMU_API_ENDPOINT)}/capability/generator?isVirtualDevice=${deviceType === 'virtual'}`,
+      `${trimTrailingSlash(String(options.apiEndpoint ?? TESTMU_API_ENDPOINT))}/capability/generator?isVirtualDevice=${deviceType === 'virtual'}`,
     undefined,
     clientVersion,
   );

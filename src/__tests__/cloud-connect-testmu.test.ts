@@ -85,6 +85,32 @@ test('connect testmu generates a local provider profile and verifies the virtual
   }
 });
 
+test('connect testmu verifies against TESTMU_API_ENDPOINT', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-endpoint-');
+  vi.stubEnv('LT_USERNAME', 'lt-user');
+  vi.stubEnv('LT_ACCESS_KEY', 'lt-key');
+  vi.stubEnv('TESTMU_API_ENDPOINT', 'https://staging.testmu.test/mobile-automation/api/v1');
+
+  try {
+    await connectWithGeneratedProviderProfile({
+      stateDir: path.join(tempRoot, '.state'),
+      positionals: ['testmu'],
+      flags: {
+        platform: 'android',
+        device: 'Pixel 8',
+        providerOsVersion: '14',
+        providerApp: 'lt://APP1',
+      },
+    });
+
+    const options = mockedVerifyWebDriverConnection.mock.calls[0]?.[0];
+    assert.equal(options?.provider, 'testmu');
+    assert.equal(options.apiEndpoint, 'https://staging.testmu.test/mobile-automation/api/v1');
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect testmu rejects BrowserStack network and re-sign flags before saving a profile', () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-reject-');
 

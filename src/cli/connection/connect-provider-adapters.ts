@@ -173,6 +173,7 @@ async function verifyTestMu(
     ),
     app: requiredResolvedValue(flags.providerApp, 'TestMu AI profile missed app.'),
     ...(flags.providerDeviceType ? { deviceType: flags.providerDeviceType } : {}),
+    ...(env.TESTMU_API_ENDPOINT ? { apiEndpoint: env.TESTMU_API_ENDPOINT } : {}),
   });
 }
 

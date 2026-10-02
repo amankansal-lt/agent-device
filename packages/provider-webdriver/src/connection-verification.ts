@@ -43,6 +43,8 @@ export type CloudWebDriverConnectionVerificationOptions =
       provider: 'testmu';
       /** Defaults to `virtual`. */
       deviceType?: ProviderDeviceType;
+      /** Base of the catalog API, as `TESTMU_API_ENDPOINT` sets it for the runtime. */
+      apiEndpoint?: string | URL;
     })
   | {
       provider: 'aws-device-farm';
