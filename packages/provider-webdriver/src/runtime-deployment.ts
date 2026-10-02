@@ -6,6 +6,7 @@ import type {
   AppDeploymentInput,
   AppDeploymentResult,
   DeployMaterializedAppInput,
+  MaterializedAppSource,
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
@@ -49,10 +50,10 @@ export function createWebDriverDeploymentRuntime(
     findSessionForDevice(device: DeviceInfo): WebDriverProviderSession | undefined;
   }>,
 ): WebDriverDeploymentRuntime {
-  const installApp = async (
+  const install = async (
     device: DeviceInfo,
     app: string,
-    appPath: string,
+    paths: Readonly<{ appPath: string; uploadPath: string }>,
     installOptions?: ProviderDeviceInstallOptions,
     signal?: AbortSignal,
   ): Promise<ProviderDeviceInstallResult | undefined> => {
@@ -63,13 +64,20 @@ export function createWebDriverDeploymentRuntime(
       session,
       device,
       app,
-      appPath,
+      paths.uploadPath,
       installOptions,
       signal,
     );
-    await session.client.installApp(upload?.appReference ?? appPath, signal);
+    await session.client.installApp(upload?.appReference ?? paths.appPath, signal);
     return providerInstallResult(upload, installOptions);
   };
+  const installApp = async (
+    device: DeviceInfo,
+    app: string,
+    appPath: string,
+    installOptions?: ProviderDeviceInstallOptions,
+    signal?: AbortSignal,
+  ) => await install(device, app, { appPath, uploadPath: appPath }, installOptions, signal);
   return Object.freeze({
     fact: (device) => deploymentFact(options.findSessionForDevice(device)),
     installApp,
@@ -92,10 +100,13 @@ export function createWebDriverDeploymentRuntime(
       ),
     deployMaterializedApp: async (device, input, signal) =>
       deploymentResult(
-        await installApp(
+        await install(
           device,
           '',
-          input.artifact.installablePath,
+          {
+            appPath: input.artifact.installablePath,
+            uploadPath: materializedUploadPath(input.artifact),
+          },
           {
             appIdentifierHint: input.artifact.bundleId,
             packageNameHint: input.artifact.packageName,
@@ -104,6 +115,17 @@ export function createWebDriverDeploymentRuntime(
         ),
       ),
   });
+}
+
+/**
+ * Materialization extracts an iOS `.app` bundle out of a zipped simulator build or an .ipa, and no
+ * hosted upload API takes a directory, so the uploader gets the archive the bundle came from.
+ */
+function materializedUploadPath(artifact: MaterializedAppSource): string {
+  const { archivePath, installablePath } = artifact;
+  return archivePath && /\.(zip|ipa)$/i.test(archivePath) && /\.app\/?$/i.test(installablePath)
+    ? archivePath
+    : installablePath;
 }
 
 function deploymentFact(session: WebDriverProviderSession | undefined): RuntimeOperationFact {
