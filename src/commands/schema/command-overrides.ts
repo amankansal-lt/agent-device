@@ -77,6 +77,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'leaseBackend',
       'providerApp',
       'providerOsVersion',
+      'providerDeviceType',
       'providerProject',
       'providerBuild',
       'providerSessionName',

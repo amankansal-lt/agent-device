@@ -98,6 +98,89 @@ test('a configured lt:options cannot turn off the W3C dialect', () => {
   assert.equal(ltOptions.tunnel, true);
 });
 
+// A configured `isRealMobile` would silently move the session to the other pool, which bills
+// differently.
+test('the device type selects the TestMu pool and a configured lt:options cannot override it', () => {
+  const base = {
+    platform: 'ios' as const,
+    deviceName: 'iPhone 16',
+    osVersion: '18',
+    buildName: 'run-1',
+    sessionName: 'lease-1',
+  };
+  const real = buildTestMuCapabilities({
+    ...base,
+    deviceType: 'real',
+    configured: { 'lt:options': { isRealMobile: false, tunnel: true } },
+  });
+  const realOptions = real['lt:options'] as Record<string, unknown>;
+  assert.equal(realOptions.isRealMobile, true);
+  assert.equal(realOptions.tunnel, true);
+  assert.equal(realOptions.platformVersion, '18');
+
+  const virtual = buildTestMuCapabilities({
+    ...base,
+    deviceType: 'virtual',
+    configured: { 'lt:options': { isRealMobile: true } },
+  });
+  assert.equal((virtual['lt:options'] as Record<string, unknown>).isRealMobile, false);
+
+  const unset = buildTestMuCapabilities(base);
+  assert.equal((unset['lt:options'] as Record<string, unknown>).isRealMobile, false);
+});
+
+test('TestMu uploads go to the upload API of the selected device pool', async () => {
+  const tempDir = await mkdtempForTest('agent-device-testmu-upload-pool-');
+  const appPath = path.join(tempDir, 'MyApp.ipa');
+  const endpoints: string[] = [];
+  try {
+    await fs.writeFile(appPath, 'placeholder');
+    globalThis.fetch = async (input) => {
+      endpoints.push(String(input));
+      return jsonResponse({ app_url: 'lt://APP1' });
+    };
+    await uploadTestMuApp(appPath, { ...auth, deviceType: 'real' });
+    await uploadTestMuAppFromUrl('https://example.test/App.apk', { ...auth, deviceType: 'real' });
+    await uploadTestMuApp(appPath, auth);
+    await uploadTestMuApp(appPath, { ...auth, deviceType: 'virtual' });
+    await uploadTestMuApp(appPath, {
+      ...auth,
+      deviceType: 'real',
+      endpoint: 'https://upload.test/real',
+    });
+    assert.deepEqual(endpoints, [
+      'https://manual-api.lambdatest.com/app/upload/realDevice',
+      'https://manual-api.lambdatest.com/app/upload/realDevice',
+      'https://manual-api.lambdatest.com/app/upload/virtualDevice',
+      'https://manual-api.lambdatest.com/app/upload/virtualDevice',
+      'https://upload.test/real',
+    ]);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('a real-device upload of an .app directory asks for a signed .ipa', async () => {
+  const tempDir = await mkdtempForTest('agent-device-testmu-real-app-dir-');
+  const appPath = path.join(tempDir, 'Demo.app');
+  try {
+    await fs.mkdir(appPath);
+    const fetchMock = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+    await assert.rejects(
+      uploadTestMuApp(appPath, { ...auth, deviceType: 'real' }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.match(String(error.details?.hint), /signed \.ipa/);
+        return true;
+      },
+    );
+    assert.equal(fetchMock.mock.calls.length, 0);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('TestMu upload reads the lt:// reference and aborts while the request is in flight', async () => {
   const tempDir = await mkdtempForTest('agent-device-testmu-upload-');
   const appPath = path.join(tempDir, 'App.apk');

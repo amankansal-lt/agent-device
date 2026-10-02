@@ -6,15 +6,18 @@ import type {
   CloudWebDriverConnectionVerification,
   CloudWebDriverConnectionVerificationOptions,
 } from './connection-verification.ts';
-import type { ProviderConnectionResource } from '@agent-device/contracts/remote';
+import type {
+  ProviderConnectionResource,
+  ProviderDeviceType,
+} from '@agent-device/contracts/remote';
 
 type TestMuOptions = Extract<CloudWebDriverConnectionVerificationOptions, { provider: 'testmu' }>;
 
 type TestMuAuth = { username: string; accessKey: string };
 
 /**
- * Verifies a TestMu virtual-device selection without creating a session: the public capability
- * catalog confirms the device/OS pair exists in the emulator and simulator pool, and the
+ * Verifies a TestMu device selection without creating a session: the public capability catalog
+ * of the selected pool (real or virtual) confirms the device/OS pair exists, and the
  * authenticated app listing confirms the credentials and, for an `lt://` reference, the upload.
  */
 export async function verifyTestMuConnection(
@@ -22,16 +25,18 @@ export async function verifyTestMuConnection(
   clientVersion: string,
 ): Promise<CloudWebDriverConnectionVerification> {
   const auth = { username: options.username, accessKey: options.accessKey };
+  const deviceType = options.deviceType ?? 'virtual';
   const catalog = await fetchTestMuJson(
     options.devicesEndpoint ??
-      `${trimTrailingSlash(TESTMU_API_ENDPOINT)}/capability/generator?isVirtualDevice=true`,
+      `${trimTrailingSlash(TESTMU_API_ENDPOINT)}/capability/generator?isVirtualDevice=${deviceType === 'virtual'}`,
     undefined,
     clientVersion,
   );
-  const namedDevices = readTestMuVirtualDevices(catalog, options.platform).filter(
+  const namedDevices = readTestMuCatalogDevices(catalog, options.platform, deviceType).filter(
     (device) => device.name === options.deviceName,
   );
-  // Exact match on purpose: the hub rejects `18` for a device the catalog lists as `18.0`.
+  // Exact match on purpose: the hub rejects `18` for a virtual device the catalog lists as `18.0`,
+  // and real iOS devices are listed by major version only.
   const matchedDevice = namedDevices.find((device) =>
     device.osVersions.includes(options.osVersion),
   );
@@ -41,24 +46,25 @@ export async function verifyTestMuConnection(
     );
     throw new AppError(
       'INVALID_ARGS',
-      `TestMu virtual device "${options.deviceName}" with ${options.platform} ${options.osVersion} is not available${
+      `TestMu ${deviceType} device "${options.deviceName}" with ${options.platform} ${options.osVersion} is not available${
         offered.length > 0 ? `; ${options.deviceName} offers ${offered.join(', ')}` : ''
       }.`,
       {
-        hint: 'Choose an exact device name and OS version from the TestMu virtual-device capability generator.',
+        hint: `Choose an exact device name and OS version from the TestMu ${deviceType}-device capability generator.`,
+        deviceType,
         ...(offered.length > 0 ? { availableOsVersions: offered } : {}),
       },
     );
   }
 
-  const app = await verifyTestMuApp(options, auth, clientVersion);
+  const app = await verifyTestMuApp(options, deviceType, auth, clientVersion);
   return {
     provider: 'testmu',
     service: 'TestMu',
     verificationMessage:
       app.status === 'verified'
-        ? 'Credentials, virtual device, and uploaded app verified.'
-        : 'Credentials and virtual device verified; app availability is checked when the session is created.',
+        ? `Credentials, ${deviceType} device, and uploaded app verified.`
+        : `Credentials and ${deviceType} device verified; app availability is checked when the session is created.`,
     device: {
       status: 'verified',
       name: matchedDevice.name,
@@ -71,6 +77,7 @@ export async function verifyTestMuConnection(
 
 async function verifyTestMuApp(
   options: TestMuOptions,
+  deviceType: ProviderDeviceType,
   auth: TestMuAuth,
   clientVersion: string,
 ): Promise<ProviderConnectionResource> {
@@ -84,11 +91,15 @@ async function verifyTestMuApp(
   if (isTestMuAppReference(app)) {
     const matched = readTestMuApps(apps).find((entry) => entry.reference === app);
     if (!matched) {
+      // A match is proof either way, but whether this listing includes real-device uploads is
+      // unconfirmed, so a miss for the real pool is not reported as "not found".
       return {
         status: 'configured',
         reference: app,
         message:
-          'App reference was not found among your uploaded apps; TestMu validates it when creating the session.',
+          deviceType === 'real'
+            ? 'Real-device app reference was not matched in the app listing; TestMu validates it when creating the session.'
+            : 'App reference was not found among your uploaded apps; TestMu validates it when creating the session.',
       };
     }
     return { status: 'verified', ...matched };
@@ -126,20 +137,25 @@ async function fetchTestMuJson(
 }
 
 /**
- * The capability generator lists virtual devices per platform under
- * `app.devices.<platform>.brands.<brand>[]` as `{ name, osVersion: string[] }`.
+ * The capability generator lists devices per platform as `brands.<brand>[]` of
+ * `{ name, osVersion: string[] }`: under `app.devices.<platform>` for the virtual pool
+ * (`isVirtualDevice=true`), and directly under `<platform>` for the real pool.
  */
-function readTestMuVirtualDevices(
+function readTestMuCatalogDevices(
   value: unknown,
   platform: 'android' | 'ios',
+  deviceType: ProviderDeviceType,
 ): Array<{ name: string; osVersions: string[] }> {
-  const brands = asRecord(asRecord(asRecord(asRecord(value)?.app)?.devices)?.[platform])?.brands;
-  const brandRecord = asRecord(brands);
+  const platformCatalog =
+    deviceType === 'real'
+      ? asRecord(asRecord(value)?.[platform])
+      : asRecord(asRecord(asRecord(asRecord(value)?.app)?.devices)?.[platform]);
+  const brandRecord = asRecord(platformCatalog?.brands);
   if (!brandRecord) {
     throw new AppError(
       'COMMAND_FAILED',
-      'TestMu virtual-device catalog response did not list devices for the platform.',
-      { platform },
+      `TestMu ${deviceType}-device catalog response did not list devices for the platform.`,
+      { platform, deviceType },
     );
   }
   return Object.values(brandRecord).flatMap((devices) => {

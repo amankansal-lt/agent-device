@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
+import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
 import {
@@ -50,6 +51,7 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
   BROWSERSTACK_APP_UPLOAD_ENDPOINT?: string;
   TESTMU_WEBDRIVER_ENDPOINT?: string;
   TESTMU_APP_UPLOAD_ENDPOINT?: string;
+  TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN?: string;
@@ -59,15 +61,15 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
 };
 
 /**
- * TestMu (formerly LambdaTest) virtual devices: emulators and simulators behind the Appium hub
- * its real devices use. Only what `createRuntime` needs synchronously lives here; the session,
+ * TestMu (formerly LambdaTest) real devices, and virtual devices (emulators and simulators), behind
+ * one Appium hub. Only what `createRuntime` needs synchronously lives here; the session,
  * upload, and artifact code loads on first use so the package entry stays as lean as it was.
  */
 const TESTMU_WEBDRIVER_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
 const TESTMU_CAPABILITY_OVERRIDES = {
   install: {
     support: 'partial',
-    note: 'Local app artifacts are uploaded to TestMu as virtual-device apps (lt://), then installed with Appium.',
+    note: 'Local app artifacts are uploaded to TestMu as real- or virtual-device apps (lt://), then installed with Appium.',
   },
   portReverse: {
     support: 'unsupported',
@@ -125,6 +127,10 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'BrowserStack');
+            (await loadTestMuDeviceFeatures()).rejectTestMuOnlyProviderFlags(
+              request.flags,
+              CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+            );
             const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack');
             const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack');
             const platform = requireRequestPlatform(request, 'BrowserStack');
@@ -229,6 +235,10 @@ export function createCloudWebDriverProviderDefinitions(
               request.flags,
               CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
             );
+            (await loadTestMuDeviceFeatures()).rejectTestMuOnlyProviderFlags(
+              request.flags,
+              CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+            );
             const platform = requireRequestPlatform(request, 'AWS Device Farm');
             const sessionOptions = {
               client: createAwsCliDeviceFarmClient({
@@ -283,7 +293,7 @@ export function createCloudWebDriverProviderDefinitions(
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
           platform: 'android',
-          deviceName: 'TestMu virtual device',
+          deviceName: 'TestMu device',
           endpoint: env.TESTMU_WEBDRIVER_ENDPOINT ?? TESTMU_WEBDRIVER_ENDPOINT,
           capabilityOverrides: TESTMU_CAPABILITY_OVERRIDES,
           listArtifacts: async ({ provider, providerSessionId }) =>
@@ -294,9 +304,12 @@ export function createCloudWebDriverProviderDefinitions(
             const {
               buildTestMuDeviceFeatureCapabilities,
               readTestMuDeviceFeatureFields,
+              readTestMuDeviceType,
               rejectUnsupportedTestMuDeviceFeatures,
             } = await loadTestMuDeviceFeatures();
             rejectUnsupportedTestMuDeviceFeatures(request.flags);
+            const deviceType = readTestMuDeviceType(request.flags);
+            const uploadEndpoint = testMuAppUploadEndpoint(env, deviceType);
             const credentials = requireTestMuCredentials(env, 'TestMu');
             const platform = requireRequestPlatform(request, 'TestMu');
             const deviceName = requireFlag(request, 'device', 'TestMu requires --device <name>.');
@@ -314,7 +327,8 @@ export function createCloudWebDriverProviderDefinitions(
               ),
               cwd: request.cwd,
               ...credentials,
-              uploadEndpoint: env.TESTMU_APP_UPLOAD_ENDPOINT,
+              deviceType,
+              uploadEndpoint,
               signal: request.signal,
             });
             return {
@@ -325,10 +339,12 @@ export function createCloudWebDriverProviderDefinitions(
               uploadApp: createTestMuUploadApp({
                 clientVersion: dependencies.clientVersion,
                 ...credentials,
-                endpoint: env.TESTMU_APP_UPLOAD_ENDPOINT,
+                deviceType,
+                endpoint: uploadEndpoint,
               }),
               webdriverCapabilities: buildTestMuCapabilities({
                 platform,
+                deviceType,
                 deviceName,
                 osVersion,
                 app,
@@ -372,12 +388,23 @@ function requireTestMuCredentials(
   };
 }
 
+/** Each pool has its own upload API, so each has its own override. */
+function testMuAppUploadEndpoint(
+  env: DefaultCloudWebDriverProviderRuntimeEnv,
+  deviceType: ProviderDeviceType,
+): string | undefined {
+  return deviceType === 'real'
+    ? env.TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT
+    : env.TESTMU_APP_UPLOAD_ENDPOINT;
+}
+
 async function resolveTestMuAppReference(options: {
   clientVersion: string;
   app: string;
   cwd?: string;
   username: string;
   accessKey: string;
+  deviceType: ProviderDeviceType;
   uploadEndpoint?: string;
   signal?: AbortSignal;
 }): Promise<string> {
@@ -387,6 +414,7 @@ async function resolveTestMuAppReference(options: {
     clientVersion: options.clientVersion,
     username: options.username,
     accessKey: options.accessKey,
+    deviceType: options.deviceType,
     endpoint: options.uploadEndpoint,
   };
   // The hub only accepts lt:// references, so a public URL is handed to the upload API to fetch.

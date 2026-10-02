@@ -446,6 +446,11 @@ test('usageForCommand resolves remote help topic', async () => {
     help.indexOf('BrowserStack hosted-device flow'),
   );
   assert.match(testMuFlow, /--device "iPhone 16" --provider-os-version 18\.0/);
+  assert.match(
+    testMuFlow,
+    /connect testmu --provider-device-type real .*--provider-os-version 18 --provider-app \.\/MyApp\.ipa/,
+  );
+  assert.match(testMuFlow, /major OS version \(18, not 18\.0\)/);
   assert.match(testMuFlow, /agent-device disconnect/);
   assert.match(help, /Limrun uses LIMRUN_API_KEY/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);

@@ -6,6 +6,8 @@ import {
   TESTMU_DEVICE_FEATURE_SPECS,
   buildTestMuDeviceFeatureCapabilities,
   readTestMuDeviceFeatureFields,
+  readTestMuDeviceType,
+  rejectTestMuOnlyProviderFlags,
   rejectUnsupportedTestMuDeviceFeatures,
 } from './testmu-device-features.ts';
 
@@ -100,4 +102,36 @@ test('BrowserStack-only flags are rejected by flag name instead of being dropped
       }),
     /--provider-network-profile, --provider-custom-network are not supported by TestMu/,
   );
+});
+
+test('the device type defaults to the virtual pool and rejects unknown values', () => {
+  assert.equal(readTestMuDeviceType(undefined), 'virtual');
+  assert.equal(readTestMuDeviceType({ providerDeviceType: '' }), 'virtual');
+  assert.equal(readTestMuDeviceType({ providerDeviceType: 'virtual' }), 'virtual');
+  assert.equal(readTestMuDeviceType({ providerDeviceType: 'real' }), 'real');
+  assert.throws(
+    () => readTestMuDeviceType({ providerDeviceType: 'physical' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.flag === '--provider-device-type',
+  );
+});
+
+test('other providers refuse --provider-device-type by flag name', () => {
+  assert.doesNotThrow(() => rejectTestMuOnlyProviderFlags(undefined, 'browserstack'));
+  assert.doesNotThrow(() =>
+    rejectTestMuOnlyProviderFlags({ providerGeoLocation: 'US' }, 'browserstack'),
+  );
+  for (const providerDeviceType of ['real', 'virtual']) {
+    assert.throws(
+      () => rejectTestMuOnlyProviderFlags({ providerDeviceType }, 'aws-device-farm'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        /--provider-device-type is only supported by TestMu, not aws-device-farm/.test(
+          error.message,
+        ),
+    );
+  }
 });

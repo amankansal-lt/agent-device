@@ -4,7 +4,10 @@ import {
   rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
-import { rejectUnsupportedTestMuDeviceFeatures } from '@agent-device/provider-webdriver/testmu-device-features';
+import {
+  rejectTestMuOnlyProviderFlags,
+  rejectUnsupportedTestMuDeviceFeatures,
+} from '@agent-device/provider-webdriver/testmu-device-features';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
@@ -118,6 +121,7 @@ function browserStackProfileFields(options: {
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
+  rejectTestMuOnlyProviderFlags(options.flags, CLOUD_WEBDRIVER_PROVIDERS.browserStack);
   return hubProviderProfileFields(BROWSERSTACK_HUB_PROFILE, options);
 }
 
@@ -127,7 +131,10 @@ function testMuProfileFields(options: {
   cwd: string;
 }): RemoteConfigProfile {
   rejectUnsupportedTestMuDeviceFeatures(options.flags);
-  return hubProviderProfileFields(TESTMU_HUB_PROFILE, options);
+  return {
+    ...hubProviderProfileFields(TESTMU_HUB_PROFILE, options),
+    providerDeviceType: options.flags.providerDeviceType,
+  };
 }
 
 function hubProviderProfileFields(
@@ -181,6 +188,7 @@ function awsDeviceFarmProfileFields(options: {
 }): RemoteConfigProfile {
   const { env, flags } = options;
   rejectBrowserStackOnlyDeviceFeatures(flags, CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+  rejectTestMuOnlyProviderFlags(flags, CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
   const platform = requireCloudWebDriverPlatform(
     flags.platform,
     'connect aws-device-farm requires --platform ios|android.',

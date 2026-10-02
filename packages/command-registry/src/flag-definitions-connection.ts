@@ -1,4 +1,7 @@
-import { PROVIDER_DEVICE_ORIENTATIONS } from '@agent-device/contracts/remote';
+import {
+  PROVIDER_DEVICE_ORIENTATIONS,
+  PROVIDER_DEVICE_TYPES,
+} from '@agent-device/contracts/remote';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
@@ -171,6 +174,17 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-os-version <version>',
     usageDescription: 'Hosted cloud provider OS version, for example 17 or 14.0',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'providerDeviceType',
+    names: ['--provider-device-type'],
+    type: 'enum',
+    enumValues: PROVIDER_DEVICE_TYPES,
+    usageLabel: '--provider-device-type real|virtual',
+    usageDescription:
+      'TestMu device pool: real devices or virtual devices (emulators and simulators). Defaults to virtual',
     projectConfig: false,
     recorded: false,
   },

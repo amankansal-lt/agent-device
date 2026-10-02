@@ -169,6 +169,7 @@ async function verifyTestMu(
     deviceName: requiredResolvedValue(flags.device, 'TestMu profile missed device.'),
     osVersion: requiredResolvedValue(flags.providerOsVersion, 'TestMu profile missed OS version.'),
     app: requiredResolvedValue(flags.providerApp, 'TestMu profile missed app.'),
+    ...(flags.providerDeviceType ? { deviceType: flags.providerDeviceType } : {}),
   });
 }
 

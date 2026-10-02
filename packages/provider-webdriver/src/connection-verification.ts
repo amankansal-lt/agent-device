@@ -1,5 +1,8 @@
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
-import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
+import type {
+  ProviderConnectionVerification,
+  ProviderDeviceType,
+} from '@agent-device/contracts/remote';
 import { verifyAwsDeviceFarmConnection } from './aws-device-farm-connection-verification.ts';
 import { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
 
@@ -36,7 +39,11 @@ type HubSelectionVerificationOptions = {
 
 export type CloudWebDriverConnectionVerificationOptions =
   | (HubSelectionVerificationOptions & { provider: 'browserstack' })
-  | (HubSelectionVerificationOptions & { provider: 'testmu' })
+  | (HubSelectionVerificationOptions & {
+      provider: 'testmu';
+      /** Defaults to `virtual`. */
+      deviceType?: ProviderDeviceType;
+    })
   | {
       provider: 'aws-device-farm';
       platform: 'android' | 'ios';

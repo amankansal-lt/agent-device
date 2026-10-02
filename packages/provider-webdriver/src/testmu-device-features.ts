@@ -1,4 +1,8 @@
-import type { CloudProviderProfileFields } from '@agent-device/contracts/remote';
+import {
+  PROVIDER_DEVICE_TYPES,
+  type CloudProviderProfileFields,
+  type ProviderDeviceType,
+} from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireProviderDeviceOrientation } from './webdriver-utils.ts';
 
@@ -87,7 +91,7 @@ export function rejectUnsupportedTestMuDeviceFeatures(
     'INVALID_ARGS',
     `${configured.join(', ')} ${plural ? 'are' : 'is'} not supported by TestMu.`,
     {
-      hint: `Drop ${plural ? 'those flags' : 'the flag'}; TestMu virtual devices have no equivalent capability.`,
+      hint: `Drop ${plural ? 'those flags' : 'the flag'}; TestMu has no equivalent capability.`,
       provider: 'testmu',
       flags: configured,
     },
@@ -112,4 +116,39 @@ export function readTestMuDeviceFeatureFields(
     fields[spec.field] = value;
   }
   return fields;
+}
+
+/** Reads the TestMu device pool off an untyped flag bag; an unset value keeps the virtual pool. */
+export function readTestMuDeviceType(
+  flags: Record<string, unknown> | undefined,
+): ProviderDeviceType {
+  const value = flags?.providerDeviceType;
+  if (value === undefined || value === '') return 'virtual';
+  const match = PROVIDER_DEVICE_TYPES.find((deviceType) => deviceType === value);
+  if (match) return match;
+  throw new AppError('INVALID_ARGS', `Invalid --provider-device-type value: ${String(value)}.`, {
+    hint: `Use ${PROVIDER_DEVICE_TYPES.join('|')}.`,
+    flag: '--provider-device-type',
+  });
+}
+
+/**
+ * Fails when another provider was given a TestMu-only flag. Like the BrowserStack-only check, it
+ * runs in both the connect profile builder and session preparation.
+ */
+export function rejectTestMuOnlyProviderFlags(
+  flags: Record<string, unknown> | undefined,
+  provider: string,
+): void {
+  const value = flags?.providerDeviceType;
+  if (value === undefined || value === '') return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `--provider-device-type is only supported by TestMu, not ${provider}.`,
+    {
+      hint: 'Drop the flag or use the testmu provider.',
+      provider,
+      flags: ['--provider-device-type'],
+    },
+  );
 }

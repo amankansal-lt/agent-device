@@ -352,6 +352,138 @@ test('TestMu defers an lt:// reference it cannot find and a local path it will u
   });
 });
 
+// The real-device catalog is keyed by platform at the top level, not under `app.devices`.
+const testMuRealCatalog = {
+  android: {
+    brands: {
+      Google: [
+        { name: 'Pixel 6', osVersion: ['12', '13', '14', '15', '16'] },
+        { name: 'Pixel 8', osVersion: ['14'] },
+      ],
+    },
+  },
+  ios: {
+    brands: {
+      Apple: [
+        { name: 'iPhone 16', osVersion: ['18'] },
+        { name: 'iPhone 15', osVersion: ['17', '18', '26'] },
+      ],
+    },
+  },
+  roku: { brands: {} },
+  tvos: { brands: {} },
+};
+
+test('TestMu verifies a real device against the real-device catalog shape', async () => {
+  const fetchMock = vi.fn<typeof fetch>(async (input) =>
+    String(input).includes('capability/generator')
+      ? jsonResponse(testMuRealCatalog)
+      : jsonResponse({ data: [{ app_id: 'APP1', name: 'MyApp.ipa' }], metaData: { total: 1 } }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const { devicesEndpoint: _devicesEndpoint, ...defaultCatalog } = testMuOptions;
+
+  const result = await createProvider().verifyConnection({
+    ...defaultCatalog,
+    deviceType: 'real',
+    platform: 'ios',
+    deviceName: 'iPhone 16',
+    osVersion: '18',
+  });
+
+  assert.equal(result.verificationMessage, 'Credentials, real device, and uploaded app verified.');
+  assert.deepEqual(result.device, {
+    status: 'verified',
+    name: 'iPhone 16',
+    platform: 'ios',
+    osVersion: '18',
+  });
+  assert.equal(
+    String(fetchMock.mock.calls[0]?.[0]),
+    'https://mobile-api.lambdatest.com/mobile-automation/api/v1/capability/generator?isVirtualDevice=false',
+  );
+
+  const android = await createProvider().verifyConnection({
+    ...testMuOptions,
+    deviceType: 'real',
+    deviceName: 'Pixel 6',
+    osVersion: '14',
+  });
+  assert.equal(android.device.name, 'Pixel 6');
+});
+
+// Real iOS devices are listed by major version, so `18.0` is the wrong spelling for the real pool.
+test('TestMu matches real-device OS versions exactly and lists what the device offers', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async () => jsonResponse(testMuRealCatalog)),
+  );
+  const realIos = {
+    ...testMuOptions,
+    deviceType: 'real' as const,
+    platform: 'ios' as const,
+    deviceName: 'iPhone 15',
+  };
+  await assert.rejects(
+    createProvider().verifyConnection({ ...realIos, deviceName: 'iPhone 16', osVersion: '18.0' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal((error as { code?: string }).code, 'INVALID_ARGS');
+      assert.match(error.message, /TestMu real device "iPhone 16" with ios 18\.0 is not available/);
+      assert.match(error.message, /iPhone 16 offers 18\.$/);
+      return true;
+    },
+  );
+  await assert.rejects(
+    createProvider().verifyConnection({ ...realIos, osVersion: '16' }),
+    /iPhone 15 offers 17, 18, 26/,
+  );
+});
+
+test('TestMu fails typed when a catalog does not have the selected pool shape', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async () => jsonResponse(testMuCatalog)),
+  );
+  await assert.rejects(
+    createProvider().verifyConnection({ ...testMuOptions, deviceType: 'real' }),
+    (error: unknown) =>
+      error instanceof Error &&
+      (error as { code?: string }).code === 'COMMAND_FAILED' &&
+      /real-device catalog response did not list devices/.test(error.message),
+  );
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async () => jsonResponse(testMuRealCatalog)),
+  );
+  await assert.rejects(
+    createProvider().verifyConnection(testMuOptions),
+    /virtual-device catalog response did not list devices/,
+  );
+});
+
+test('TestMu does not report a real-device lt:// id as missing from the app listing', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('capability/generator')
+        ? jsonResponse(testMuRealCatalog)
+        : jsonResponse({ data: [], metaData: { total: 0 } }),
+    ),
+  );
+  const result = await createProvider().verifyConnection({
+    ...testMuOptions,
+    deviceType: 'real',
+    deviceName: 'Pixel 6',
+  });
+  assert.equal(result.app.status, 'configured');
+  assert.match(String(result.app.message), /Real-device app reference was not matched/);
+  assert.equal(
+    result.verificationMessage,
+    'Credentials and real device verified; app availability is checked when the session is created.',
+  );
+});
+
 function createProvider(runHostCommand: RunHostCommand = vi.fn()) {
   return createProviderWebDriver({ clientVersion: '1.2.3', runHostCommand });
 }
