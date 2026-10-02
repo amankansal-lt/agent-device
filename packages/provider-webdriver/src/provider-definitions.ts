@@ -69,15 +69,15 @@ const TESTMU_WEBDRIVER_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
 const TESTMU_CAPABILITY_OVERRIDES = {
   install: {
     support: 'partial',
-    note: 'Local app artifacts are uploaded to TestMu as real- or virtual-device apps (lt://), then installed with Appium.',
+    note: 'Local app artifacts are uploaded to TestMu AI as real- or virtual-device apps (lt://), then installed with Appium.',
   },
   portReverse: {
     support: 'unsupported',
-    note: 'Use the TestMu tunnel for network access to local hosts; agent-device port reverse is not available.',
+    note: 'Use the TestMu AI tunnel for network access to local hosts; agent-device port reverse is not available.',
   },
   artifacts: {
     support: 'supported',
-    note: 'TestMu session details expose provider-hosted video, Appium logs, device logs, network logs, and dashboard links.',
+    note: 'TestMu AI session details expose provider-hosted video, Appium logs, device logs, network logs, and dashboard links.',
   },
 } as const satisfies CloudWebDriverCapabilityOverrides;
 
@@ -293,13 +293,13 @@ export function createCloudWebDriverProviderDefinitions(
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
           platform: 'android',
-          deviceName: 'TestMu device',
+          deviceName: 'TestMu AI device',
           endpoint: env.TESTMU_WEBDRIVER_ENDPOINT ?? TESTMU_WEBDRIVER_ENDPOINT,
           capabilityOverrides: TESTMU_CAPABILITY_OVERRIDES,
           listArtifacts: async ({ provider, providerSessionId }) =>
             await listTestMuArtifactsFromEnv(provider, providerSessionId, env),
           prepareSession: async ({ req, lease, base }) => {
-            const request = requireRequest(req, 'TestMu');
+            const request = requireRequest(req, 'TestMu AI');
             const { buildTestMuCapabilities, createTestMuUploadApp } = await loadTestMu();
             const {
               buildTestMuDeviceFeatureCapabilities,
@@ -310,20 +310,24 @@ export function createCloudWebDriverProviderDefinitions(
             rejectUnsupportedTestMuDeviceFeatures(request.flags);
             const deviceType = readTestMuDeviceType(request.flags);
             const uploadEndpoint = testMuAppUploadEndpoint(env, deviceType);
-            const credentials = requireTestMuCredentials(env, 'TestMu');
-            const platform = requireRequestPlatform(request, 'TestMu');
-            const deviceName = requireFlag(request, 'device', 'TestMu requires --device <name>.');
+            const credentials = requireTestMuCredentials(env, 'TestMu AI');
+            const platform = requireRequestPlatform(request, 'TestMu AI');
+            const deviceName = requireFlag(
+              request,
+              'device',
+              'TestMu AI requires --device <name>.',
+            );
             const osVersion = requireFlag(
               request,
               'providerOsVersion',
-              'TestMu requires --provider-os-version <version>.',
+              'TestMu AI requires --provider-os-version <version>.',
             );
             const app = await resolveTestMuAppReference({
               clientVersion: dependencies.clientVersion,
               app: requireFlag(
                 request,
                 'providerApp',
-                'TestMu requires --provider-app <lt://app-id, URL, or local path>.',
+                'TestMu AI requires --provider-app <lt://app-id, URL, or local path>.',
               ),
               cwd: request.cwd,
               ...credentials,
@@ -372,7 +376,7 @@ export function createCloudWebDriverProviderDefinitions(
     const { listTestMuCloudArtifacts } = await loadTestMu();
     return await listTestMuCloudArtifacts(provider, providerSessionId, {
       clientVersion: dependencies.clientVersion,
-      ...requireTestMuCredentials(env, 'TestMu artifact lookup'),
+      ...requireTestMuCredentials(env, 'TestMu AI artifact lookup'),
       endpoint: env.TESTMU_API_ENDPOINT,
     });
   }
@@ -425,7 +429,7 @@ async function resolveTestMuAppReference(options: {
   if (!fs.existsSync(appPath)) {
     throw new AppError(
       'INVALID_ARGS',
-      'TestMu --provider-app must be an lt:// app id, URL, or existing local app path.',
+      'TestMu AI --provider-app must be an lt:// app id, URL, or existing local app path.',
       { providerApp: options.app },
     );
   }

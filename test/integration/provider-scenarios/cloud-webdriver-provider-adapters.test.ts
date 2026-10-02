@@ -253,7 +253,7 @@ test('BrowserStack facade rejects the TestMu device type at session preparation'
           await runtime.leaseLifecycle.allocate?.(lease, {
             flags: { ...context.flags, providerDeviceType: 'real' },
           }),
-        /--provider-device-type is only supported by TestMu, not browserstack/,
+        /--provider-device-type is only supported by TestMu AI, not browserstack/,
       );
       assert.deepEqual(server.calls, []);
     } finally {

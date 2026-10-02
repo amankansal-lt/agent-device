@@ -30,7 +30,7 @@ beforeEach(() => {
     assert.equal(options.provider, 'testmu');
     return {
       provider: 'testmu',
-      service: 'TestMu',
+      service: 'TestMu AI',
       verificationMessage: 'Credentials, device, and uploaded app verified.',
       device: {
         status: 'verified',
@@ -111,7 +111,7 @@ test('connect testmu rejects BrowserStack network and re-sign flags before savin
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.code, 'INVALID_ARGS');
-        assert.match(error.message, /not supported by TestMu/);
+        assert.match(error.message, /not supported by TestMu AI/);
         assert.deepEqual(error.details?.flags, [
           '--provider-network-profile',
           '--provider-no-resign-app',
@@ -214,7 +214,7 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
           assert.equal(error.code, 'INVALID_ARGS');
           assert.match(
             error.message,
-            new RegExp(`--provider-device-type is only supported by TestMu, not ${provider}`),
+            new RegExp(`--provider-device-type is only supported by TestMu AI, not ${provider}`),
           );
           return true;
         },
@@ -235,7 +235,7 @@ test('connect limrun refuses the TestMu device type', async () => {
     },
   );
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /--provider-device-type is only supported by TestMu, not limrun/);
+  assert.match(result.stdout, /--provider-device-type is only supported by TestMu AI, not limrun/);
 });
 
 async function connectWithGeneratedProviderProfile(options: {

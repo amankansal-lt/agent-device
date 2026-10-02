@@ -438,11 +438,11 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /uploaded artifacts remain supported/);
   assert.match(
     help,
-    /Limrun, BrowserStack, AWS Device Farm, and TestMu through local provider profiles/,
+    /Limrun, BrowserStack, AWS Device Farm, and TestMu AI through local provider profiles/,
   );
-  assert.match(help, /TestMu uses LT_USERNAME and LT_ACCESS_KEY/);
+  assert.match(help, /TestMu AI uses LT_USERNAME and LT_ACCESS_KEY/);
   const testMuFlow = help.slice(
-    help.indexOf('TestMu virtual-device flow'),
+    help.indexOf('TestMu AI virtual-device flow'),
     help.indexOf('BrowserStack hosted-device flow'),
   );
   assert.match(testMuFlow, /--device "iPhone 16" --provider-os-version 18\.0/);

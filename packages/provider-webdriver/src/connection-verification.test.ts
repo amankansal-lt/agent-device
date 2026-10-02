@@ -230,7 +230,7 @@ test('TestMu verifies the virtual device and uploaded app without creating a ses
   const result = await createProvider().verifyConnection(testMuOptions);
 
   assert.equal(result.provider, 'testmu');
-  assert.equal(result.service, 'TestMu');
+  assert.equal(result.service, 'TestMu AI');
   assert.deepEqual(result.device, {
     status: 'verified',
     name: 'Pixel 8',
@@ -429,7 +429,10 @@ test('TestMu matches real-device OS versions exactly and lists what the device o
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.equal((error as { code?: string }).code, 'INVALID_ARGS');
-      assert.match(error.message, /TestMu real device "iPhone 16" with ios 18\.0 is not available/);
+      assert.match(
+        error.message,
+        /TestMu AI real device "iPhone 16" with ios 18\.0 is not available/,
+      );
       assert.match(error.message, /iPhone 16 offers 18\.$/);
       return true;
     },

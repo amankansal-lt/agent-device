@@ -100,7 +100,7 @@ test('BrowserStack-only flags are rejected by flag name instead of being dropped
         providerNetworkProfile: '4g-lte-good',
         providerCustomNetwork: '1000',
       }),
-    /--provider-network-profile, --provider-custom-network are not supported by TestMu/,
+    /--provider-network-profile, --provider-custom-network are not supported by TestMu AI/,
   );
 });
 
@@ -129,7 +129,7 @@ test('other providers refuse --provider-device-type by flag name', () => {
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'INVALID_ARGS' &&
-        /--provider-device-type is only supported by TestMu, not aws-device-farm/.test(
+        /--provider-device-type is only supported by TestMu AI, not aws-device-farm/.test(
           error.message,
         ),
     );

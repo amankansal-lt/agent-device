@@ -89,9 +89,9 @@ export function rejectUnsupportedTestMuDeviceFeatures(
   const plural = configured.length !== 1;
   throw new AppError(
     'INVALID_ARGS',
-    `${configured.join(', ')} ${plural ? 'are' : 'is'} not supported by TestMu.`,
+    `${configured.join(', ')} ${plural ? 'are' : 'is'} not supported by TestMu AI.`,
     {
-      hint: `Drop ${plural ? 'those flags' : 'the flag'}; TestMu has no equivalent capability.`,
+      hint: `Drop ${plural ? 'those flags' : 'the flag'}; TestMu AI has no equivalent capability.`,
       provider: 'testmu',
       flags: configured,
     },
@@ -144,7 +144,7 @@ export function rejectTestMuOnlyProviderFlags(
   if (value === undefined || value === '') return;
   throw new AppError(
     'INVALID_ARGS',
-    `--provider-device-type is only supported by TestMu, not ${provider}.`,
+    `--provider-device-type is only supported by TestMu AI, not ${provider}.`,
     {
       hint: 'Drop the flag or use the testmu provider.',
       provider,

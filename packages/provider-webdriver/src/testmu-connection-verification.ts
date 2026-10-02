@@ -52,11 +52,11 @@ export async function verifyTestMuConnection(
     );
     throw new AppError(
       'INVALID_ARGS',
-      `TestMu ${deviceType} device "${options.deviceName}" with ${options.platform} ${options.osVersion} is not available${
+      `TestMu AI ${deviceType} device "${options.deviceName}" with ${options.platform} ${options.osVersion} is not available${
         offered.length > 0 ? `; ${options.deviceName} offers ${offered.join(', ')}` : ''
       }.`,
       {
-        hint: `Choose an exact device name and OS version from the TestMu ${deviceType}-device capability generator.`,
+        hint: `Choose an exact device name and OS version from the TestMu AI ${deviceType}-device capability generator.`,
         deviceType,
         ...(offered.length > 0 ? { availableOsVersions: offered } : {}),
       },
@@ -66,7 +66,7 @@ export async function verifyTestMuConnection(
   const app = await verifyTestMuApp(options, deviceType, auth, clientVersion);
   return {
     provider: 'testmu',
-    service: 'TestMu',
+    service: 'TestMu AI',
     verificationMessage:
       app.status === 'verified'
         ? `Credentials, ${deviceType} device, and uploaded app verified.`
@@ -100,7 +100,7 @@ async function verifyTestMuApp(
       return {
         status: 'configured',
         reference: app,
-        message: `App reference was not found among your ${deviceType}-device uploads; TestMu validates it when creating the session.`,
+        message: `App reference was not found among your ${deviceType}-device uploads; TestMu AI validates it when creating the session.`,
       };
     }
     return { status: 'verified', ...matched };
@@ -109,7 +109,7 @@ async function verifyTestMuApp(
     return {
       status: 'configured',
       reference: app,
-      message: 'Public app URL configured; TestMu fetches it when creating the session.',
+      message: 'Public app URL configured; TestMu AI fetches it when creating the session.',
     };
   }
   return {
@@ -129,7 +129,7 @@ async function fetchTestMuJson(
     clientVersion,
     auth,
     hints: {
-      service: 'TestMu',
+      service: 'TestMu AI',
       unauthorizedHint: 'Check LT_USERNAME and LT_ACCESS_KEY.',
       networkHint:
         'Check network access to mobile-api.lambdatest.com and manual-api.lambdatest.com, then retry connect.',
@@ -155,7 +155,7 @@ function readTestMuCatalogDevices(
   if (!brandRecord) {
     throw new AppError(
       'COMMAND_FAILED',
-      `TestMu ${deviceType}-device catalog response did not list devices for the platform.`,
+      `TestMu AI ${deviceType}-device catalog response did not list devices for the platform.`,
       { platform, deviceType },
     );
   }
@@ -179,7 +179,7 @@ function readTestMuApps(
   const record = asRecord(value);
   const data = record?.data;
   if (!Array.isArray(data)) {
-    throw new AppError('COMMAND_FAILED', 'TestMu app listing response was not a list.');
+    throw new AppError('COMMAND_FAILED', 'TestMu AI app listing response was not a list.');
   }
   return data.flatMap((entry) => {
     const app = asRecord(entry);

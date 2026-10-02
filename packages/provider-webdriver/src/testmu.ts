@@ -66,7 +66,7 @@ export async function listTestMuCloudArtifacts(
     provider,
     providerSessionId,
     artifacts,
-    pendingMessage: 'TestMu artifacts are not ready yet.',
+    pendingMessage: 'TestMu AI artifacts are not ready yet.',
   });
 }
 
@@ -85,7 +85,7 @@ export async function uploadTestMuApp(
 ): Promise<string> {
   signal?.throwIfAborted();
   if (!(await fs.stat(appPath)).isFile()) {
-    throw new AppError('INVALID_ARGS', `TestMu can only upload an app file: ${appPath}`, {
+    throw new AppError('INVALID_ARGS', `TestMu AI can only upload an app file: ${appPath}`, {
       appPath,
       hint:
         options.deviceType === 'real'
@@ -132,7 +132,7 @@ async function postTestMuUpload(
   const json = await readProviderJsonBody(response);
   const appUrl = readTestMuAppReference(json);
   if (!response.ok || !appUrl) {
-    throw new AppError('COMMAND_FAILED', 'TestMu app upload failed.', {
+    throw new AppError('COMMAND_FAILED', 'TestMu AI app upload failed.', {
       status: response.status,
       response: json,
     });
@@ -214,7 +214,7 @@ async function fetchTestMuSessionDetails(
     json = await fetchProviderSessionDetails(endpoint, {
       clientVersion: options.clientVersion,
       auth: options,
-      service: 'TestMu',
+      service: 'TestMu AI',
       timeoutMs: TESTMU_API_TIMEOUT_MS,
     });
   } catch (error) {
@@ -225,7 +225,7 @@ async function fetchTestMuSessionDetails(
   // The API wraps the session in a jsend envelope: `{ status, data: {...}, message }`.
   const details = (json as { data?: unknown }).data;
   if (!details || typeof details !== 'object' || Array.isArray(details)) {
-    throw new AppError('COMMAND_FAILED', 'TestMu session details response had no data.', {
+    throw new AppError('COMMAND_FAILED', 'TestMu AI session details response had no data.', {
       response: json,
     });
   }
@@ -258,7 +258,7 @@ function mapTestMuArtifacts(
     provider,
     providerSessionId,
     kind: 'provider-session',
-    name: 'TestMu dashboard',
+    name: 'TestMu AI dashboard',
     url: `${TESTMU_DASHBOARD_TEST_URL}${encodeURIComponent(providerSessionId)}`,
     availability: 'ready',
   };

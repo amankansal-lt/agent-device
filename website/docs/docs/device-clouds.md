@@ -9,10 +9,10 @@ Use a device cloud or farm when an agent needs to automate a hosted mobile devic
 
 - [BrowserStack](/docs/browserstack): Android and iOS App Automate sessions over WebDriver.
 - [AWS Device Farm](/docs/aws-device-farm): Android and iOS remote-access sessions through AWS.
-- [TestMu](/docs/testmu): Android emulator, iOS simulator, and real-device sessions over WebDriver.
+- [TestMu AI](/docs/testmu): Android emulator, iOS simulator, and real-device sessions over WebDriver.
 - [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances.
 
-All four integrations run through the local `agent-device` daemon. `connect` checks the credentials and configuration, then saves non-secret connection state. It does not allocate a device. BrowserStack, AWS Device Farm, and TestMu allocate a hosted session on `open`. Limrun allocates an instance on the first device command, such as `install` or `open`.
+All four integrations run through the local `agent-device` daemon. `connect` checks the credentials and configuration, then saves non-secret connection state. It does not allocate a device. BrowserStack, AWS Device Farm, and TestMu AI allocate a hosted session on `open`. Limrun allocates an instance on the first device command, such as `install` or `open`.
 
 For each provider, the standard lifecycle is:
 

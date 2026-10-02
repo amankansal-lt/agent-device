@@ -184,7 +184,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: PROVIDER_DEVICE_TYPES,
     usageLabel: '--provider-device-type real|virtual',
     usageDescription:
-      'TestMu device pool: real devices or virtual devices (emulators and simulators). Defaults to virtual',
+      'TestMu AI device pool: real devices or virtual devices (emulators and simulators). Defaults to virtual',
     projectConfig: false,
     recorded: false,
   },
@@ -250,7 +250,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-appium-version <version>',
     usageDescription:
-      'Hosted cloud provider Appium server version, for example 3.2.0. Without it BrowserStack falls back to its default (Appium 1.x); TestMu requests latest',
+      'Hosted cloud provider Appium server version, for example 3.2.0. Without it BrowserStack falls back to its default (Appium 1.x); TestMu AI requests latest',
     projectConfig: false,
     recorded: false,
   },

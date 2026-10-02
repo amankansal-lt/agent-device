@@ -163,12 +163,15 @@ async function verifyTestMu(
   const { flags, env } = context;
   return await providerWebDriver.verifyConnection({
     provider: 'testmu',
-    username: requiredResolvedValue(env.LT_USERNAME, 'TestMu profile missed LT_USERNAME.'),
-    accessKey: requiredResolvedValue(env.LT_ACCESS_KEY, 'TestMu profile missed LT_ACCESS_KEY.'),
-    platform: requiredResolvedPlatform(flags.platform, 'TestMu'),
-    deviceName: requiredResolvedValue(flags.device, 'TestMu profile missed device.'),
-    osVersion: requiredResolvedValue(flags.providerOsVersion, 'TestMu profile missed OS version.'),
-    app: requiredResolvedValue(flags.providerApp, 'TestMu profile missed app.'),
+    username: requiredResolvedValue(env.LT_USERNAME, 'TestMu AI profile missed LT_USERNAME.'),
+    accessKey: requiredResolvedValue(env.LT_ACCESS_KEY, 'TestMu AI profile missed LT_ACCESS_KEY.'),
+    platform: requiredResolvedPlatform(flags.platform, 'TestMu AI'),
+    deviceName: requiredResolvedValue(flags.device, 'TestMu AI profile missed device.'),
+    osVersion: requiredResolvedValue(
+      flags.providerOsVersion,
+      'TestMu AI profile missed OS version.',
+    ),
+    app: requiredResolvedValue(flags.providerApp, 'TestMu AI profile missed app.'),
     ...(flags.providerDeviceType ? { deviceType: flags.providerDeviceType } : {}),
   });
 }

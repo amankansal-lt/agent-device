@@ -110,7 +110,7 @@ const BROWSERSTACK_HUB_PROFILE: HubProviderProfile = {
 
 const TESTMU_HUB_PROFILE: HubProviderProfile = {
   command: 'connect testmu',
-  label: 'TestMu',
+  label: 'TestMu AI',
   credentialEnv: ['LT_USERNAME', 'LT_ACCESS_KEY'],
   appScheme: 'lt://',
   appHint: '<lt://app-id, URL, or local path>',

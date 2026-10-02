@@ -73,7 +73,7 @@ beforeEach(() => {
       : options.provider === 'testmu'
         ? {
             provider: 'testmu',
-            service: 'TestMu',
+            service: 'TestMu AI',
             verificationMessage: 'Credentials, virtual device, and uploaded app verified.',
             device: {
               status: 'verified',

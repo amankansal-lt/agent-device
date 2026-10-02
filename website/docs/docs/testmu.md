@@ -1,19 +1,19 @@
 ---
-title: TestMu
-description: Drive TestMu (LambdaTest) virtual devices, Android emulators and iOS simulators, and real devices with agent-device.
+title: TestMu AI
+description: Drive TestMu AI (formerly LambdaTest) virtual devices, Android emulators and iOS simulators, and real devices with agent-device.
 ---
 
-# TestMu
+# TestMu AI
 
-Use TestMu virtual devices for hosted Android emulator and iOS simulator WebDriver sessions, or
-TestMu real devices with `--provider-device-type real`. TestMu (formerly LambdaTest) fronts both
-pools with one Appium hub; agent-device selects the pool with `isRealMobile` and defaults to the
+TestMu AI (formerly LambdaTest) hosts virtual devices for Android emulator and iOS simulator
+WebDriver sessions, and real devices you select with `--provider-device-type real`. One Appium hub
+fronts both pools; agent-device selects the pool with `isRealMobile` and defaults to the
 virtual-device pool.
 
 ## Credentials and connection
 
-Set TestMu credentials in a non-interactive environment. These are the same variables every TestMu
-SDK reads:
+Set TestMu AI credentials in a non-interactive environment. These are the same variables every
+TestMu AI SDK reads:
 
 ```bash
 export LT_USERNAME=...
@@ -34,15 +34,15 @@ agent-device connect testmu \
 hub rejects `--provider-os-version 18` for a device listed with `18.0`, so `connect` does too and
 lists the versions the device offers.
 
-`--provider-app` accepts a TestMu app reference such as `lt://APP...`, an HTTP(S) app URL, or an
-existing local app path (`.apk`, or a zipped simulator `.app` for iOS). TestMu uploads a local path
-or fetches a URL when it creates the hosted session, through the virtual-device upload API.
+`--provider-app` accepts a TestMu AI app reference such as `lt://APP...`, an HTTP(S) app URL, or
+an existing local app path (`.apk`, or a zipped simulator `.app` for iOS). TestMu AI uploads a local
+path or fetches a URL when it creates the hosted session, through the virtual-device upload API.
 
-During `connect`, agent-device checks the device/OS pair against TestMu's virtual-device catalog
-(`/capability/generator?isVirtualDevice=true`), verifies the credentials against your uploaded-app
-listing, matches an `lt://` reference against that listing, and confirms that a local artifact
-exists before saving its absolute path. `open` still needs the app's installed package or bundle
-identifier, not the upload name or `lt://` id.
+During `connect`, agent-device checks the device/OS pair against TestMu AI's virtual-device
+catalog (`/capability/generator?isVirtualDevice=true`), verifies the credentials against your
+uploaded-app listing, matches an `lt://` reference against that listing, and confirms that a local
+artifact exists before saving its absolute path. `open` still needs the app's installed package or
+bundle identifier, not the upload name or `lt://` id.
 
 Optional labels:
 
@@ -63,14 +63,14 @@ Optional device features:
 --provider-locale fr_FR                                      # (alias --locale)
 ```
 
-TestMu receives these values in `lt:options` when it creates the hosted session.
+TestMu AI receives these values in `lt:options` when it creates the hosted session.
 
 - Without `--provider-appium-version`, agent-device requests `latest`, so the `mobile:` commands it
   issues (`deepLink`, `pressButton`, `activateApp`) land on an Appium 2.x or newer server. Pin a
   version when a suite depends on one.
 - `--provider-network-profile`, `--provider-custom-network`, and `--provider-no-resign-app` are
-  BrowserStack capabilities; `connect testmu` and TestMu session creation refuse them by flag name
-  rather than ignoring them.
+  BrowserStack capabilities; `connect testmu` and TestMu AI session creation refuse them by flag
+  name rather than ignoring them.
 - Session video and device logs are requested on every session so `artifacts` has something to
   return.
 
@@ -106,7 +106,7 @@ agent-device connect testmu \
   pool you connect to; when in doubt, pass the local path or URL and let agent-device upload it.
 - `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` redirects real-device uploads, as
   `TESTMU_APP_UPLOAD_ENDPOINT` does for virtual-device uploads.
-- `--provider-device-type` is TestMu-only; other providers refuse it.
+- `--provider-device-type` applies only to TestMu AI; other providers refuse it.
 
 ## CLI workflow
 
@@ -135,7 +135,7 @@ provider `connect` commands.
 
 ## Node.js client
 
-The typed client reaches TestMu through a lease. Allocate one with the provider selectors, then
+The typed client reaches TestMu AI through a lease. Allocate one with the provider selectors, then
 scope a client to it for normal commands. `sessions.close()` ends the hosted session and releases
 the lease; `leases.release()` in `finally` is then a no-op, and still releases the lease when a
 command fails first. The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment. Add
@@ -181,7 +181,7 @@ if (providerSessionId) {
 
 ## Artifacts and troubleshooting
 
-After `close`, TestMu can return session video, Appium logs, device logs, network and command
+After `close`, TestMu AI can return session video, Appium logs, device logs, network and command
 logs, a screenshot archive, and the App Automation dashboard link. Run `agent-device artifacts
 --json`, or look up a previous session explicitly:
 
@@ -189,10 +189,10 @@ logs, a screenshot archive, and the App Automation dashboard link. Run `agent-de
 agent-device artifacts <webdriver-session-id> --provider testmu --json
 ```
 
-The TestMu session id is the WebDriver session id. If artifact lookup is pending immediately after
-`close`, retry it; TestMu finalizes video and log URLs after the session ends.
+The TestMu AI session id is the WebDriver session id. If artifact lookup is pending immediately
+after `close`, retry it; TestMu AI finalizes video and log URLs after the session ends.
 
-Endpoints can be redirected for a staging or private TestMu deployment with
+Endpoints can be redirected for a staging or private TestMu AI deployment with
 `TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT` (virtual devices),
 `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` (real devices), and `TESTMU_API_ENDPOINT`.
 

@@ -185,7 +185,7 @@ test('TestMu upload reads the lt:// reference and aborts while the request is in
   const tempDir = await mkdtempForTest('agent-device-testmu-upload-');
   const appPath = path.join(tempDir, 'App.apk');
   const controller = new AbortController();
-  const abortReason = new Error('request cancelled during TestMu upload');
+  const abortReason = new Error('request cancelled during TestMu AI upload');
   try {
     await fs.writeFile(appPath, 'placeholder');
     globalThis.fetch = async (_input, init) =>
@@ -410,7 +410,7 @@ test('TestMu session details lookup types a timeout and a network failure', asyn
   await assert.rejects(listTestMuCloudArtifacts('testmu', 'SESSION1', auth), (error: unknown) => {
     assert.ok(error instanceof AppError);
     assert.equal(error.code, 'COMMAND_FAILED');
-    assert.match(error.message, /TestMu session details lookup failed/);
+    assert.match(error.message, /TestMu AI session details lookup failed/);
     assert.match(String(error.details?.hint), /retry/);
     assert.equal(error.cause, timeout);
     return true;

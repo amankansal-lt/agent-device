@@ -21,7 +21,7 @@ export type CloudWebDriverConnectionVerification =
     })
   | (ProviderConnectionVerification & {
       provider: 'testmu';
-      service: 'TestMu';
+      service: 'TestMu AI';
       project?: never;
     });
 
