@@ -27,8 +27,6 @@ const TESTMU_APP_UPLOAD_ENDPOINTS: Record<ProviderDeviceType, string> = {
 export const TESTMU_APPS_ENDPOINT = 'https://manual-api.lambdatest.com/app/data';
 export const TESTMU_API_ENDPOINT = 'https://mobile-api.lambdatest.com/mobile-automation/api/v1';
 const TESTMU_DASHBOARD_TEST_URL = 'https://appautomation.lambdatest.com/test?testID=';
-/** The Appium alias TestMu resolves to the newest server it hosts for the selected OS version. */
-export const TESTMU_DEFAULT_APPIUM_VERSION = 'latest';
 
 export type TestMuCapabilitiesOptions = {
   platform: CloudWebDriverPlatform;
@@ -159,9 +157,8 @@ export async function resolveTestMuAppReference(
  *
  * Standard Appium keys stay `appium:`-prefixed at the top level; everything TestMu-specific lives
  * in `lt:options`. `isRealMobile` selects a real device or an emulator/simulator, and `w3c: true`
- * keeps the hub on the W3C dialect agent-device speaks. Without an explicit Appium version the hub
- * may start a 1.x server, which lacks the `mobile:` extensions the interactor issues, so `latest`
- * is requested unless the caller pins one.
+ * keeps the hub on the W3C dialect agent-device speaks. `appiumVersion` is sent only when the caller
+ * pins one; otherwise TestMu AI starts its default server for the device.
  */
 export function buildTestMuCapabilities(
   options: TestMuCapabilitiesOptions,
@@ -182,7 +179,6 @@ export function buildTestMuCapabilities(
       ...(options.projectName ? { project: options.projectName } : {}),
       build: options.buildName,
       name: options.sessionName,
-      appiumVersion: TESTMU_DEFAULT_APPIUM_VERSION,
       video: true,
       devicelog: true,
       ...deviceFeatures,

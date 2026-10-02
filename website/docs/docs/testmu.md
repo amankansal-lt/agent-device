@@ -65,9 +65,8 @@ Optional device features:
 
 TestMu AI receives these values in `lt:options` when it creates the hosted session.
 
-- Without `--provider-appium-version`, agent-device requests `latest`, so the `mobile:` commands it
-  issues (`deepLink`, `pressButton`, `activateApp`) land on an Appium 2.x or newer server. Pin a
-  version when a suite depends on one.
+- Without `--provider-appium-version`, agent-device sends no Appium version and TestMu AI starts
+  its default server for the device. Pin a version when a suite depends on one.
 - `--provider-network-profile`, `--provider-custom-network`, and `--provider-no-resign-app` are
   BrowserStack capabilities; `connect testmu` and TestMu AI session creation refuse them by flag
   name rather than ignoring them.

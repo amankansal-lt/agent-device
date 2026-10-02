@@ -4,7 +4,6 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  TESTMU_DEFAULT_APPIUM_VERSION,
   buildTestMuCapabilities,
   createTestMuUploadApp,
   listTestMuCloudArtifacts,
@@ -53,7 +52,6 @@ test('TestMu capabilities select the virtual-device pool and keep vendor keys in
       project: 'agent-device',
       build: 'run-1',
       name: 'lease-1',
-      appiumVersion: TESTMU_DEFAULT_APPIUM_VERSION,
       video: true,
       devicelog: true,
       geoLocation: 'US',
@@ -67,7 +65,8 @@ test('TestMu capabilities select the virtual-device pool and keep vendor keys in
   }
 });
 
-test('a configured lt:options merges per key and a pinned Appium version wins over latest', () => {
+// Unpinned, TestMu AI starts its own default Appium server for the device, as BrowserStack does.
+test('a configured lt:options merges per key and only a pinned Appium version is sent', () => {
   const capabilities = buildTestMuCapabilities({
     platform: 'ios',
     deviceName: 'iPhone 16',
@@ -83,6 +82,15 @@ test('a configured lt:options merges per key and a pinned Appium version wins ov
   assert.equal(ltOptions.build, 'run-1');
   assert.equal(ltOptions.platformName, 'iOS');
   assert.equal('appium:app' in capabilities, false);
+
+  const unpinned = buildTestMuCapabilities({
+    platform: 'ios',
+    deviceName: 'iPhone 16',
+    osVersion: '18.0',
+    buildName: 'run-1',
+    sessionName: 'lease-1',
+  });
+  assert.equal('appiumVersion' in (unpinned['lt:options'] as Record<string, unknown>), false);
 });
 
 test('a configured lt:options cannot turn off the W3C dialect', () => {
