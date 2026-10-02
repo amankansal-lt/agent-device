@@ -304,7 +304,7 @@ test('connect proxy rejects remote-config and unknown provider combinations', as
         },
         client: createTestClient(),
       }),
-    /Supported providers: cloud, proxy, browserstack, aws-device-farm/,
+    /Supported providers: cloud, proxy, browserstack, lambdatest, aws-device-farm/,
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

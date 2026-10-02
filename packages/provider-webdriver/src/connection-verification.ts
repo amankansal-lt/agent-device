@@ -12,6 +12,11 @@ export type CloudWebDriverConnectionVerification =
       project?: never;
     })
   | (ProviderConnectionVerification & {
+      provider: 'lambdatest';
+      service: 'LambdaTest';
+      project?: never;
+    })
+  | (ProviderConnectionVerification & {
       provider: 'aws-device-farm';
       service: 'AWS Device Farm';
       project: { name?: string; reference: string };
@@ -30,6 +35,16 @@ export type CloudWebDriverConnectionVerificationOptions =
       appsEndpoint?: string | URL;
     }
   | {
+      provider: 'lambdatest';
+      username: string;
+      accessKey: string;
+      platform: 'android' | 'ios';
+      deviceName: string;
+      osVersion: string;
+      app: string;
+      concurrencyEndpoint?: string | URL;
+    }
+  | {
       provider: 'aws-device-farm';
       platform: 'android' | 'ios';
       projectArn: string;
@@ -42,7 +57,15 @@ export async function verifyCloudWebDriverConnection(
   options: CloudWebDriverConnectionVerificationOptions,
   dependencies: ProviderWebDriverDependencies,
 ): Promise<CloudWebDriverConnectionVerification> {
-  return options.provider === 'browserstack'
-    ? await verifyBrowserStackConnection(options, dependencies.clientVersion)
-    : await verifyAwsDeviceFarmConnection(options, dependencies.runHostCommand);
+  switch (options.provider) {
+    case 'browserstack':
+      return await verifyBrowserStackConnection(options, dependencies.clientVersion);
+    case 'lambdatest': {
+      const { verifyLambdaTestConnection } =
+        await import('./lambdatest-connection-verification.ts');
+      return await verifyLambdaTestConnection(options, dependencies.clientVersion);
+    }
+    case 'aws-device-farm':
+      return await verifyAwsDeviceFarmConnection(options, dependencies.runHostCommand);
+  }
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import { providerWebDriver } from './provider-webdriver.ts';
 import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 
@@ -81,6 +81,37 @@ test('root provider facade runs AWS artifact lookup through the host command ada
     restoreEnv('AGENT_DEVICE_TEST_AWS_CALLS_PATH', previousCallsPath);
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+test('root provider facade looks up LambdaTest artifacts with Basic auth from the environment', async () => {
+  const fetchMock = vi.fn<typeof fetch>(
+    async () =>
+      new Response(JSON.stringify({ data: { video_url: 'https://lambdatest.test/video.mp4' } })),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+
+  const result = await providerWebDriver.listArtifactsFromEnv(
+    { provider: 'lambdatest', providerSessionId: 'session-1' },
+    {
+      LT_USERNAME: 'lt-user',
+      LT_ACCESS_KEY: 'lt-key',
+      LAMBDATEST_SESSION_DETAILS_ENDPOINT: 'https://lambdatest.test/sessions',
+    },
+  );
+
+  assert.equal(result?.provider, 'lambdatest');
+  assert.deepEqual(
+    result?.cloudArtifacts.map(({ kind, url }) => ({ kind, url })),
+    [{ kind: 'video', url: 'https://lambdatest.test/video.mp4' }],
+  );
+  const [input, init] = fetchMock.mock.calls[0] ?? [];
+  assert.equal(String(input), 'https://lambdatest.test/sessions/session-1');
+  assert.equal(
+    new Headers(init?.headers).get('Authorization'),
+    `Basic ${Buffer.from('lt-user:lt-key').toString('base64')}`,
+  );
 });
 
 function restoreEnv(name: string, value: string | undefined): void {

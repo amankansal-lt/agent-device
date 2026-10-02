@@ -64,6 +64,11 @@ const CONNECT_PROVIDER_ADAPTERS = {
       resolveCloudWebDriverConnectProfile({ provider: 'browserstack', ...context }),
     verify: verifyBrowserStack,
   },
+  lambdatest: {
+    resolve: (context) =>
+      resolveCloudWebDriverConnectProfile({ provider: 'lambdatest', ...context }),
+    verify: verifyLambdaTest,
+  },
   'aws-device-farm': {
     resolve: (context) =>
       resolveCloudWebDriverConnectProfile({ provider: 'aws-device-farm', ...context }),
@@ -150,6 +155,24 @@ async function verifyBrowserStack(
       'BrowserStack profile missed OS version.',
     ),
     app: requiredResolvedValue(flags.providerApp, 'BrowserStack profile missed app.'),
+  });
+}
+
+async function verifyLambdaTest(
+  context: Pick<AdapterContext, 'flags' | 'env'>,
+): Promise<ConnectVerification> {
+  const { flags, env } = context;
+  return await providerWebDriver.verifyConnection({
+    provider: 'lambdatest',
+    username: requiredResolvedValue(env.LT_USERNAME, 'LambdaTest profile missed LT_USERNAME.'),
+    accessKey: requiredResolvedValue(env.LT_ACCESS_KEY, 'LambdaTest profile missed LT_ACCESS_KEY.'),
+    platform: requiredResolvedPlatform(flags.platform, 'LambdaTest'),
+    deviceName: requiredResolvedValue(flags.device, 'LambdaTest profile missed device.'),
+    osVersion: requiredResolvedValue(
+      flags.providerOsVersion,
+      'LambdaTest profile missed OS version.',
+    ),
+    app: requiredResolvedValue(flags.providerApp, 'LambdaTest profile missed app.'),
   });
 }
 

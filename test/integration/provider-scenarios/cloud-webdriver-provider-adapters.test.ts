@@ -142,6 +142,85 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
   });
 }, 15_000);
 
+test('LambdaTest facade nests capabilities in lt:options, uploads apps, and returns artifacts', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    await withProviderScenarioTempDir('agent-device-lambdatest-adapter-', async (tempDir) => {
+      const appPath = path.join(tempDir, 'demo.apk');
+      fs.writeFileSync(appPath, 'fake apk');
+      const provider = createProviderWebDriver({
+        clientVersion: CLIENT_VERSION,
+        runHostCommand: unexpectedHostCommand,
+      });
+      const runtime = runtimeFor(
+        provider.createDefaultRuntimes({
+          LT_USERNAME: 'lt-user',
+          LT_ACCESS_KEY: 'lt-key',
+          LAMBDATEST_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+          LAMBDATEST_APP_UPLOAD_ENDPOINT: `${server.url}/app/upload/virtualDevice`,
+          LAMBDATEST_SESSION_DETAILS_ENDPOINT: `${server.url}/mobile-automation/api/v1/sessions`,
+        }),
+        CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+      );
+      const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.lambdaTest);
+      try {
+        const allocation = await runtime.leaseLifecycle.allocate?.(lease, {
+          flags: { ...browserStackContext(lease).flags, device: 'Pixel 8', providerApp: appPath },
+        });
+        assert.equal(allocation?.providerSessionId, 'wd-1');
+        assert.equal(operationSupport(allocation, 'install'), 'partial');
+        assert.equal(operationSupport(allocation, 'artifacts'), 'supported');
+        assert.match(operationNote(allocation, 'portReverse') ?? '', /LambdaTest Tunnel/);
+        const release = await runtime.leaseLifecycle.release?.(lease);
+        assert.deepEqual(
+          (release?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts.map(
+            (artifact) => artifact.kind,
+          ),
+          ['video', 'automation-log', 'appium-log'],
+        );
+      } finally {
+        await runtime.shutdown();
+      }
+
+      assert.deepEqual(
+        server.calls.map((call) => `${call.method} ${call.path}`),
+        [
+          'POST /app/upload/virtualDevice',
+          'POST /wd/hub/session',
+          'DELETE /wd/hub/session/wd-1',
+          'GET /mobile-automation/api/v1/sessions/wd-1',
+        ],
+      );
+      for (const call of server.calls) {
+        assertAgentDeviceHeaders(call.headers);
+        assert.equal(
+          call.headers.authorization,
+          `Basic ${Buffer.from('lt-user:lt-key').toString('base64')}`,
+        );
+      }
+      assert.deepEqual(server.calls[1]?.body, {
+        capabilities: {
+          alwaysMatch: {
+            platformName: 'Android',
+            'lt:options': {
+              platformName: 'Android',
+              deviceName: 'Pixel 8',
+              platformVersion: '14.0',
+              app: 'lt://uploaded-app',
+              isRealMobile: false,
+              project: 'agent-device',
+              build: `build-${lease.runId}`,
+              name: `session-${lease.leaseId}`,
+              video: true,
+              devicelog: true,
+              w3c: true,
+            },
+          },
+        },
+      });
+    });
+  });
+}, 15_000);
+
 test('AWS Device Farm facade rejects BrowserStack-owned device features at session preparation', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
@@ -518,6 +597,16 @@ class FakeCloudProviderServer extends CloudWebDriverTestServer {
         });
       case 'POST /app-automate/upload':
         return cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' });
+      case 'POST /app/upload/virtualDevice':
+        return cloudWebDriverTestJson({ app_url: 'lt://uploaded-app' });
+      case 'GET /mobile-automation/api/v1/sessions/wd-1':
+        return cloudWebDriverTestJson({
+          data: {
+            video_url: 'https://provider.example/video.mp4',
+            command_logs_url: 'https://provider.example/command.log',
+            appium_logs_url: 'https://provider.example/appium.log',
+          },
+        });
       case 'GET /app-automate/sessions/wd-1.json':
         return cloudWebDriverTestJson({
           automation_session: {

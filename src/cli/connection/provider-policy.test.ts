@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { connectionProviderCapabilities } from './provider-policy.ts';
+import { connectionProviderCapabilities, isConnectProviderName } from './provider-policy.ts';
 
 test('provider policy projects provider identity into semantic capabilities', () => {
   assert.deepEqual(connectionProviderCapabilities('limrun'), {
@@ -15,6 +15,11 @@ test('provider policy projects provider identity into semantic capabilities', ()
   const browserStack = connectionProviderCapabilities('browserstack');
   assert.equal(browserStack.supportsArtifacts, true);
   assert.equal(browserStack.usesCloudWebDriverLease, true);
+  assert.deepEqual(connectionProviderCapabilities('lambdatest'), {
+    ...browserStack,
+    requiresAppAttachment: false,
+  });
+  assert.equal(isConnectProviderName('lambdatest'), true);
   assert.equal(connectionProviderCapabilities('aws-device-farm').requiresAppAttachment, true);
   assert.equal(connectionProviderCapabilities('proxy').leaseKind, 'proxy');
 });

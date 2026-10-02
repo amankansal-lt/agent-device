@@ -24,6 +24,8 @@ import {
   readBrowserStackDeviceFeatureFields,
   rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
+import type { LambdaTestApiOptions } from './lambdatest.ts';
+import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
 import {
@@ -33,10 +35,29 @@ import {
   type CloudWebDriverRuntime,
 } from './runtime.ts';
 
+const LAMBDATEST_APPIUM_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
+const LAMBDATEST_CAPABILITY_OVERRIDES = {
+  install: {
+    support: 'partial',
+    note: 'Local app artifacts are uploaded to LambdaTest app storage, then installed with Appium.',
+  },
+  portReverse: {
+    support: 'unsupported',
+    note: 'Use LambdaTest Tunnel for network tunneling; agent-device port reverse is not available.',
+  },
+  artifacts: {
+    support: 'supported',
+    note: 'LambdaTest session details expose provider-hosted video, command, Appium, console, and network logs, and screenshots.',
+  },
+} as const satisfies CloudWebDriverCapabilityOverrides;
+
 export type DefaultCloudWebDriverArtifactEnv = {
   BROWSERSTACK_USERNAME?: string;
   BROWSERSTACK_ACCESS_KEY?: string;
   BROWSERSTACK_SESSION_DETAILS_ENDPOINT?: string;
+  LT_USERNAME?: string;
+  LT_ACCESS_KEY?: string;
+  LAMBDATEST_SESSION_DETAILS_ENDPOINT?: string;
   AWS_REGION?: string;
   AWS_DEFAULT_REGION?: string;
 };
@@ -44,6 +65,8 @@ export type DefaultCloudWebDriverArtifactEnv = {
 export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtifactEnv & {
   BROWSERSTACK_WEBDRIVER_ENDPOINT?: string;
   BROWSERSTACK_APP_UPLOAD_ENDPOINT?: string;
+  LAMBDATEST_WEBDRIVER_ENDPOINT?: string;
+  LAMBDATEST_APP_UPLOAD_ENDPOINT?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN?: string;
@@ -171,6 +194,90 @@ export function createCloudWebDriverProviderDefinitions(
       },
     },
     {
+      provider: CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+      createRuntime: (env) =>
+        createCloudWebDriverRuntime({
+          clientVersion: dependencies.clientVersion,
+          provider: CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+          platform: 'android',
+          deviceName: 'LambdaTest device',
+          endpoint: env.LAMBDATEST_WEBDRIVER_ENDPOINT ?? LAMBDATEST_APPIUM_ENDPOINT,
+          capabilityOverrides: LAMBDATEST_CAPABILITY_OVERRIDES,
+          listArtifacts: async ({ provider, providerSessionId }) =>
+            await listLambdaTestArtifacts(
+              provider,
+              providerSessionId,
+              env,
+              dependencies.clientVersion,
+            ),
+          prepareSession: async ({ req, lease, base }) => {
+            const request = requireRequest(req, 'LambdaTest');
+            // Loaded on demand so adding a provider does not grow the facade's eager import closure.
+            const {
+              LAMBDATEST_APP_UPLOAD_ENDPOINT,
+              buildLambdaTestCapabilities,
+              createLambdaTestUploadApp,
+            } = await import('./lambdatest.ts');
+            rejectBrowserStackOnlyDeviceFeatures(
+              request.flags,
+              CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+            );
+            const username = requireEnv(env, 'LT_USERNAME', 'LambdaTest');
+            const accessKey = requireEnv(env, 'LT_ACCESS_KEY', 'LambdaTest');
+            const platform = requireRequestPlatform(request, 'LambdaTest');
+            const deviceName = requireFlag(
+              request,
+              'device',
+              'LambdaTest requires --device <name>.',
+            );
+            const osVersion = requireFlag(
+              request,
+              'providerOsVersion',
+              'LambdaTest requires --provider-os-version <version>.',
+            );
+            const uploadOptions = {
+              clientVersion: dependencies.clientVersion,
+              username,
+              accessKey,
+              endpoint: env.LAMBDATEST_APP_UPLOAD_ENDPOINT ?? LAMBDATEST_APP_UPLOAD_ENDPOINT,
+            };
+            const app = await resolveLambdaTestAppReference(
+              requireFlag(
+                request,
+                'providerApp',
+                'LambdaTest requires --provider-app <lt://app-id-or-local-path>.',
+              ),
+              request.cwd,
+              uploadOptions,
+              request.signal,
+            );
+            return {
+              ...base,
+              platform,
+              deviceName,
+              auth: { username, accessKey },
+              uploadApp: createLambdaTestUploadApp(uploadOptions),
+              webdriverCapabilities: buildLambdaTestCapabilities({
+                platform,
+                deviceName,
+                osVersion,
+                app,
+                projectName: readFlag(request, 'providerProject'),
+                buildName: readFlag(request, 'providerBuild') ?? lease.runId,
+                sessionName: readFlag(request, 'providerSessionName') ?? lease.leaseId,
+              }),
+            };
+          },
+        }),
+      listArtifactsFromEnv: async (providerSessionId, env) =>
+        await listLambdaTestArtifacts(
+          CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+          providerSessionId,
+          env,
+          dependencies.clientVersion,
+        ),
+    },
+    {
       provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
       createRuntime: (env) =>
         createCloudWebDriverRuntime({
@@ -277,6 +384,47 @@ async function resolveBrowserStackAppReference(options: {
     },
     options.signal,
   );
+}
+
+async function resolveLambdaTestAppReference(
+  app: string,
+  cwd: string | undefined,
+  uploadOptions: LambdaTestApiOptions,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  if (app.startsWith('lt://')) return app;
+  const { uploadLambdaTestApp } = await import('./lambdatest.ts');
+  if (/^https?:\/\//i.test(app)) return await uploadLambdaTestApp(app, uploadOptions, signal);
+  const appPath = path.resolve(cwd ?? process.cwd(), app);
+  const stat = fs.statSync(appPath, { throwIfNoEntry: false });
+  if (!stat?.isFile()) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'LambdaTest --provider-app must be an lt:// app id, URL, or existing local app file.',
+      {
+        providerApp: app,
+        ...(stat?.isDirectory()
+          ? { hint: 'Zip the .app bundle before uploading it for an iOS simulator.' }
+          : {}),
+      },
+    );
+  }
+  return await uploadLambdaTestApp(appPath, uploadOptions, signal);
+}
+
+async function listLambdaTestArtifacts(
+  provider: string,
+  providerSessionId: string | undefined,
+  env: DefaultCloudWebDriverArtifactEnv,
+  clientVersion: string,
+): Promise<CloudArtifactsResult | undefined> {
+  const { listLambdaTestCloudArtifacts } = await import('./lambdatest.ts');
+  return await listLambdaTestCloudArtifacts(provider, providerSessionId, {
+    clientVersion,
+    username: requireEnv(env, 'LT_USERNAME', 'LambdaTest artifact lookup'),
+    accessKey: requireEnv(env, 'LT_ACCESS_KEY', 'LambdaTest artifact lookup'),
+    endpoint: env.LAMBDATEST_SESSION_DETAILS_ENDPOINT,
+  });
 }
 
 function isProviderAppReference(value: string): boolean {

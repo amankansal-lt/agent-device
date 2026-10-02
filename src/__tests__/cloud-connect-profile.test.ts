@@ -57,7 +57,7 @@ beforeEach(() => {
     },
   });
   mockedVerifyWebDriverConnection.mockImplementation(async (options) =>
-    options.provider === 'browserstack'
+    options.provider !== 'aws-device-farm'
       ? {
           provider: 'browserstack',
           service: 'BrowserStack',
@@ -494,6 +494,54 @@ test('connect browserstack persists a local app artifact as an absolute path', a
   }
 });
 
+test('connect lambdatest verifies with LT credentials and stores a profile without them', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-lambdatest-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LT_USERNAME', 'lt-user');
+  vi.stubEnv('LT_ACCESS_KEY', 'lt-key');
+  mockedVerifyWebDriverConnection.mockResolvedValueOnce({
+    provider: 'lambdatest',
+    service: 'LambdaTest',
+    verificationMessage: 'Credentials verified.',
+    device: { status: 'deferred', name: 'Pixel 8', platform: 'android', osVersion: '14' },
+    app: { status: 'configured', reference: 'lt://APP123' },
+  });
+
+  try {
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      positionals: ['lambdatest'],
+      flags: {
+        platform: 'android',
+        device: 'Pixel 8',
+        providerOsVersion: '14',
+        providerApp: 'lt://APP123',
+        providerBuild: 'build-a',
+      },
+    });
+
+    assert.deepEqual(mockedVerifyWebDriverConnection.mock.calls[0]?.[0], {
+      provider: 'lambdatest',
+      username: 'lt-user',
+      accessKey: 'lt-key',
+      platform: 'android',
+      deviceName: 'Pixel 8',
+      osVersion: '14',
+      app: 'lt://APP123',
+    });
+    const state = readRequiredActiveState(stateDir);
+    assert.equal(state.leaseProvider, 'lambdatest');
+    assert.match(state.remoteConfigPath, /generated\/lambdatest-[a-f0-9]{16}\.json$/);
+    const generated = readGeneratedConfig(state.remoteConfigPath);
+    assert.equal(generated.providerApp, 'lt://APP123');
+    assert.equal(generated.providerOsVersion, '14');
+    assert.equal(generated.providerBuild, 'build-a');
+    assert.equal(JSON.stringify(generated).includes('lt-key'), false);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect aws-device-farm generates local provider profile from flags', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-aws-');
   const stateDir = path.join(tempRoot, '.state');
@@ -772,6 +820,43 @@ test('connect aws-device-farm rejects BrowserStack-only device-feature flags', (
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('connect lambdatest keeps an HTTP app URL for upload at session creation', () => {
+  const resolved = resolveCloudWebDriverConnectProfile({
+    provider: 'lambdatest',
+    stateDir: path.join(mkdtempForTestSync('agent-device-connect-lambdatest-'), '.state'),
+    cwd: process.cwd(),
+    env: { LT_USERNAME: 'lt-user', LT_ACCESS_KEY: 'lt-key' },
+    flags: {
+      json: false,
+      help: false,
+      version: false,
+      platform: 'ios',
+      device: 'iPhone 16',
+      providerOsVersion: '18',
+      providerApp: 'https://apps.example/Demo.zip',
+    },
+  });
+
+  assert.equal(
+    readGeneratedConfig(resolved.remoteConfigPath).providerApp,
+    'https://apps.example/Demo.zip',
+  );
+});
+
+test('connect lambdatest rejects BrowserStack-only device-feature flags', () => {
+  assert.throws(
+    () =>
+      resolveCloudWebDriverConnectProfile({
+        provider: 'lambdatest',
+        stateDir: path.join(mkdtempForTestSync('agent-device-connect-lambdatest-'), '.state'),
+        cwd: process.cwd(),
+        env: { LT_USERNAME: 'lt-user', LT_ACCESS_KEY: 'lt-key' },
+        flags: { json: false, help: false, version: false, providerTimezone: 'New_York' },
+      }),
+    /--provider-timezone is only supported by BrowserStack, not lambdatest/,
+  );
 });
 
 function mockCloudConnectionProfile(connection: Record<string, unknown>): ReturnType<typeof vi.fn> {

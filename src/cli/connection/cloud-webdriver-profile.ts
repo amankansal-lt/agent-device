@@ -67,6 +67,10 @@ const CLOUD_WEBDRIVER_CONNECT_PROFILE_BUILDERS: readonly {
     buildProfileFields: browserStackProfileFields,
   },
   {
+    provider: CLOUD_WEBDRIVER_PROVIDERS.lambdaTest,
+    buildProfileFields: lambdaTestProfileFields,
+  },
+  {
     provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
     buildProfileFields: awsDeviceFarmProfileFields,
   },
@@ -121,14 +125,51 @@ function browserStackProfileFields(options: {
 }
 
 function normalizeBrowserStackAppReference(app: string, cwd: string): string {
-  if (app.startsWith('bs://') || /^https?:\/\//i.test(app)) return app;
+  if (app.startsWith('bs://')) return app;
+  return normalizeProviderAppReference(app, cwd, 'BrowserStack');
+}
+
+function lambdaTestProfileFields(options: {
+  flags: CliFlags;
+  env?: EnvMap;
+  cwd: string;
+}): RemoteConfigProfile {
+  const { flags } = options;
+  rejectBrowserStackOnlyDeviceFeatures(flags, CLOUD_WEBDRIVER_PROVIDERS.lambdaTest);
+  requireEnv(options.env, 'LT_USERNAME', 'connect lambdatest');
+  requireEnv(options.env, 'LT_ACCESS_KEY', 'connect lambdatest');
+  const app = requireFlag(
+    flags.providerApp,
+    'connect lambdatest requires --provider-app <lt://app-id-or-local-path>.',
+  );
+  return {
+    platform: requireCloudWebDriverPlatform(
+      flags.platform,
+      'connect lambdatest requires --platform ios|android.',
+    ),
+    device: requireFlag(flags.device, 'connect lambdatest requires --device <name>.'),
+    providerOsVersion: requireFlag(
+      flags.providerOsVersion,
+      'connect lambdatest requires --provider-os-version <version>.',
+    ),
+    providerApp: app.startsWith('lt://')
+      ? app
+      : normalizeProviderAppReference(app, options.cwd, 'LambdaTest'),
+    providerProject: flags.providerProject,
+    providerBuild: flags.providerBuild,
+    providerSessionName: flags.providerSessionName,
+  };
+}
+
+function normalizeProviderAppReference(app: string, cwd: string, service: string): string {
+  if (/^https?:\/\//i.test(app)) return app;
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;
   } catch {
     // Report one stable profile error below.
   }
-  throw new AppError('INVALID_ARGS', `BrowserStack app file not found: ${resolvedPath}`);
+  throw new AppError('INVALID_ARGS', `${service} app file not found: ${resolvedPath}`);
 }
 
 function awsDeviceFarmProfileFields(options: {
