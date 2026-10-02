@@ -69,6 +69,10 @@ const CONNECT_PROVIDER_ADAPTERS = {
       resolveCloudWebDriverConnectProfile({ provider: 'aws-device-farm', ...context }),
     verify: verifyAwsDeviceFarm,
   },
+  testmu: {
+    resolve: (context) => resolveCloudWebDriverConnectProfile({ provider: 'testmu', ...context }),
+    verify: verifyTestMu,
+  },
   limrun: {
     resolve: resolveLimrunConnectProfile,
     verify: verifyLimrun,
@@ -150,6 +154,21 @@ async function verifyBrowserStack(
       'BrowserStack profile missed OS version.',
     ),
     app: requiredResolvedValue(flags.providerApp, 'BrowserStack profile missed app.'),
+  });
+}
+
+async function verifyTestMu(
+  context: Pick<AdapterContext, 'flags' | 'env'>,
+): Promise<ConnectVerification> {
+  const { flags, env } = context;
+  return await providerWebDriver.verifyConnection({
+    provider: 'testmu',
+    username: requiredResolvedValue(env.LT_USERNAME, 'TestMu profile missed LT_USERNAME.'),
+    accessKey: requiredResolvedValue(env.LT_ACCESS_KEY, 'TestMu profile missed LT_ACCESS_KEY.'),
+    platform: requiredResolvedPlatform(flags.platform, 'TestMu'),
+    deviceName: requiredResolvedValue(flags.device, 'TestMu profile missed device.'),
+    osVersion: requiredResolvedValue(flags.providerOsVersion, 'TestMu profile missed OS version.'),
+    app: requiredResolvedValue(flags.providerApp, 'TestMu profile missed app.'),
   });
 }
 

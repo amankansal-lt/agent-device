@@ -184,6 +184,132 @@ test('AWS Device Farm rejects a device from the wrong platform before allocation
   );
 });
 
+const testMuOptions = {
+  provider: 'testmu' as const,
+  username: 'lt-user',
+  accessKey: 'lt-key',
+  platform: 'android' as const,
+  deviceName: 'Pixel 8',
+  osVersion: '14',
+  app: 'lt://APP1',
+  devicesEndpoint: 'https://testmu.test/capability/generator?isVirtualDevice=true',
+  appsEndpoint: 'https://testmu.test/app/data',
+};
+
+const testMuCatalog = {
+  app: {
+    devices: {
+      android: {
+        brands: {
+          Google: [
+            { name: 'Pixel 8', osVersion: ['14', '15'] },
+            { name: 'Pixel 4a', osVersion: ['13'] },
+          ],
+        },
+      },
+      ios: { brands: { Apple: [{ name: 'iPhone 16', osVersion: ['18.0'] }] } },
+    },
+  },
+};
+
+test('TestMu verifies the virtual device and uploaded app without creating a session', async () => {
+  const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+    const headers = (init?.headers ?? {}) as Record<string, string | undefined>;
+    if (String(input).includes('capability/generator')) {
+      assert.equal(headers.Authorization, undefined);
+      return jsonResponse(testMuCatalog);
+    }
+    assert.match(String(headers.Authorization), /^Basic /);
+    return jsonResponse({
+      data: [{ app_id: 'APP1', name: 'sample.apk', version: '1.2.3', type: 'android' }],
+      metaData: { total: 1 },
+    });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const result = await createProvider().verifyConnection(testMuOptions);
+
+  assert.equal(result.provider, 'testmu');
+  assert.equal(result.service, 'TestMu');
+  assert.deepEqual(result.device, {
+    status: 'verified',
+    name: 'Pixel 8',
+    platform: 'android',
+    osVersion: '14',
+  });
+  assert.deepEqual(result.app, {
+    status: 'verified',
+    name: 'sample.apk',
+    reference: 'lt://APP1',
+    version: '1.2.3',
+  });
+  assert.deepEqual(
+    fetchMock.mock.calls.map(([input]) => String(input)),
+    [
+      'https://testmu.test/capability/generator?isVirtualDevice=true',
+      'https://testmu.test/app/data?type=android&level=user',
+    ],
+  );
+});
+
+test('TestMu rejects a device or OS version missing from the virtual-device catalog', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async () => jsonResponse(testMuCatalog)),
+  );
+  await assert.rejects(
+    createProvider().verifyConnection({ ...testMuOptions, osVersion: '12' }),
+    (error: unknown) =>
+      error instanceof Error && /"Pixel 8" with android 12 is not available/.test(error.message),
+  );
+  await assert.rejects(
+    createProvider().verifyConnection({ ...testMuOptions, platform: 'ios', deviceName: 'Pixel 8' }),
+    /is not available/,
+  );
+});
+
+test('TestMu classifies rejected credentials without exposing them', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('capability/generator')
+        ? jsonResponse(testMuCatalog)
+        : jsonResponse({ message: 'Unauthorized' }, 401),
+    ),
+  );
+  await assert.rejects(createProvider().verifyConnection(testMuOptions), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
+    assert.doesNotMatch(error.message, /lt-key/);
+    return true;
+  });
+});
+
+test('TestMu defers an lt:// reference it cannot find and a local path it will upload', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('capability/generator')
+        ? jsonResponse(testMuCatalog)
+        : jsonResponse({ data: [], metaData: { total: 0 } }),
+    ),
+  );
+  const unknownApp = await createProvider().verifyConnection(testMuOptions);
+  assert.equal(unknownApp.app.status, 'configured');
+  assert.equal(unknownApp.app.reference, 'lt://APP1');
+
+  const localApp = await createProvider().verifyConnection({
+    ...testMuOptions,
+    app: '/tmp/builds/App.apk',
+  });
+  assert.deepEqual(localApp.app, {
+    status: 'configured',
+    name: 'App.apk',
+    reference: '/tmp/builds/App.apk',
+    message: 'Local app artifact is ready and will be uploaded when creating the session.',
+  });
+});
+
 function createProvider(runHostCommand: RunHostCommand = vi.fn()) {
   return createProviderWebDriver({ clientVersion: '1.2.3', runHostCommand });
 }

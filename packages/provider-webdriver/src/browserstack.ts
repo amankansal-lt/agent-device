@@ -5,8 +5,12 @@ import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
-import { cloudArtifactsReadyOrPending } from './artifact-results.ts';
-import { basicAuthHeader, trimTrailingSlash } from './webdriver-utils.ts';
+import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
+import {
+  basicAuthHeader,
+  fetchProviderSessionDetails,
+  trimTrailingSlash,
+} from './webdriver-utils.ts';
 
 export const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
 export const BROWSERSTACK_APP_UPLOAD_ENDPOINT =
@@ -156,19 +160,11 @@ async function fetchBrowserStackSessionDetails(
   const endpoint = new URL(
     `${trimTrailingSlash(String(options.endpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT))}/${sessionId}.json`,
   );
-  const response = await fetch(endpoint, {
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options),
-    },
+  const json = await fetchProviderSessionDetails(endpoint, {
+    clientVersion: options.clientVersion,
+    auth: options,
+    service: 'BrowserStack',
   });
-  const json = (await response.json()) as unknown;
-  if (!response.ok || !json || typeof json !== 'object') {
-    throw new AppError('COMMAND_FAILED', 'BrowserStack session details lookup failed.', {
-      status: response.status,
-      response: json,
-    });
-  }
   const details = (json as { automation_session?: unknown }).automation_session ?? json;
   return details && typeof details === 'object' ? (details as Record<string, unknown>) : {};
 }
@@ -179,7 +175,7 @@ function mapBrowserStackArtifacts(
   details: Record<string, unknown>,
 ): CloudArtifact[] {
   return [
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -187,7 +183,7 @@ function mapBrowserStackArtifacts(
       'video',
       'Session video',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -195,7 +191,7 @@ function mapBrowserStackArtifacts(
       'appium-log',
       'Appium logs',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -203,7 +199,7 @@ function mapBrowserStackArtifacts(
       'device-log',
       'Device logs',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -211,7 +207,7 @@ function mapBrowserStackArtifacts(
       'provider-session',
       'BrowserStack dashboard',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -220,19 +216,6 @@ function mapBrowserStackArtifacts(
       'Public session link',
     ),
   ].filter((artifact): artifact is CloudArtifact => artifact !== undefined);
-}
-
-function browserStackUrlArtifact(
-  provider: string,
-  providerSessionId: string,
-  details: Record<string, unknown>,
-  field: string,
-  kind: CloudArtifact['kind'],
-  name: string,
-): CloudArtifact | undefined {
-  const url = details[field];
-  if (typeof url !== 'string' || url.length === 0) return undefined;
-  return { provider, providerSessionId, kind, name, url, availability: 'ready' };
 }
 
 function readBrowserStackAppUrl(value: unknown): string | undefined {

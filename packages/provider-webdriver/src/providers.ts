@@ -1,6 +1,7 @@
 export const CLOUD_WEBDRIVER_PROVIDERS = {
   browserStack: 'browserstack',
   awsDeviceFarm: 'aws-device-farm',
+  testMu: 'testmu',
 } as const;
 
 export type CloudWebDriverKnownProviderName =

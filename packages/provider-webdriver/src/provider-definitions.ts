@@ -24,6 +24,7 @@ import {
   readBrowserStackDeviceFeatureFields,
   rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
+import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
 import {
@@ -39,11 +40,16 @@ export type DefaultCloudWebDriverArtifactEnv = {
   BROWSERSTACK_SESSION_DETAILS_ENDPOINT?: string;
   AWS_REGION?: string;
   AWS_DEFAULT_REGION?: string;
+  LT_USERNAME?: string;
+  LT_ACCESS_KEY?: string;
+  TESTMU_API_ENDPOINT?: string;
 };
 
 export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtifactEnv & {
   BROWSERSTACK_WEBDRIVER_ENDPOINT?: string;
   BROWSERSTACK_APP_UPLOAD_ENDPOINT?: string;
+  TESTMU_WEBDRIVER_ENDPOINT?: string;
+  TESTMU_APP_UPLOAD_ENDPOINT?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN?: string;
@@ -51,6 +57,30 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
   AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN?: string;
   AWS_DEVICE_FARM_APP_ARN?: string;
 };
+
+/**
+ * TestMu (formerly LambdaTest) virtual devices: emulators and simulators behind the Appium hub
+ * its real devices use. Only what `createRuntime` needs synchronously lives here; the session,
+ * upload, and artifact code loads on first use so the package entry stays as lean as it was.
+ */
+const TESTMU_WEBDRIVER_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
+const TESTMU_CAPABILITY_OVERRIDES = {
+  install: {
+    support: 'partial',
+    note: 'Local app artifacts are uploaded to TestMu as virtual-device apps (lt://), then installed with Appium.',
+  },
+  portReverse: {
+    support: 'unsupported',
+    note: 'Use the TestMu tunnel for network access to local hosts; agent-device port reverse is not available.',
+  },
+  artifacts: {
+    support: 'supported',
+    note: 'TestMu session details expose provider-hosted video, Appium logs, device logs, network logs, and dashboard links.',
+  },
+} as const satisfies CloudWebDriverCapabilityOverrides;
+
+const loadTestMu = async () => await import('./testmu.ts');
+const loadTestMuDeviceFeatures = async () => await import('./testmu-device-features.ts');
 
 export type CloudWebDriverProviderDefinition = {
   provider: CloudWebDriverKnownProviderName;
@@ -246,7 +276,132 @@ export function createCloudWebDriverProviderDefinitions(
         );
       },
     },
+    {
+      provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
+      createRuntime: (env) =>
+        createCloudWebDriverRuntime({
+          clientVersion: dependencies.clientVersion,
+          provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
+          platform: 'android',
+          deviceName: 'TestMu virtual device',
+          endpoint: env.TESTMU_WEBDRIVER_ENDPOINT ?? TESTMU_WEBDRIVER_ENDPOINT,
+          capabilityOverrides: TESTMU_CAPABILITY_OVERRIDES,
+          listArtifacts: async ({ provider, providerSessionId }) =>
+            await listTestMuArtifactsFromEnv(provider, providerSessionId, env),
+          prepareSession: async ({ req, lease, base }) => {
+            const request = requireRequest(req, 'TestMu');
+            const { buildTestMuCapabilities, createTestMuUploadApp } = await loadTestMu();
+            const {
+              buildTestMuDeviceFeatureCapabilities,
+              readTestMuDeviceFeatureFields,
+              rejectUnsupportedTestMuDeviceFeatures,
+            } = await loadTestMuDeviceFeatures();
+            rejectUnsupportedTestMuDeviceFeatures(request.flags);
+            const credentials = requireTestMuCredentials(env, 'TestMu');
+            const platform = requireRequestPlatform(request, 'TestMu');
+            const deviceName = requireFlag(request, 'device', 'TestMu requires --device <name>.');
+            const osVersion = requireFlag(
+              request,
+              'providerOsVersion',
+              'TestMu requires --provider-os-version <version>.',
+            );
+            const app = await resolveTestMuAppReference({
+              clientVersion: dependencies.clientVersion,
+              app: requireFlag(
+                request,
+                'providerApp',
+                'TestMu requires --provider-app <lt://app-id, URL, or local path>.',
+              ),
+              cwd: request.cwd,
+              ...credentials,
+              uploadEndpoint: env.TESTMU_APP_UPLOAD_ENDPOINT,
+              signal: request.signal,
+            });
+            return {
+              ...base,
+              platform,
+              deviceName,
+              auth: credentials,
+              uploadApp: createTestMuUploadApp({
+                clientVersion: dependencies.clientVersion,
+                ...credentials,
+                endpoint: env.TESTMU_APP_UPLOAD_ENDPOINT,
+              }),
+              webdriverCapabilities: buildTestMuCapabilities({
+                platform,
+                deviceName,
+                osVersion,
+                app,
+                projectName: readFlag(request, 'providerProject'),
+                buildName: readFlag(request, 'providerBuild') ?? lease.runId,
+                sessionName: readFlag(request, 'providerSessionName') ?? lease.leaseId,
+                deviceFeatures: buildTestMuDeviceFeatureCapabilities(
+                  readTestMuDeviceFeatureFields(request.flags),
+                ),
+                configured: buildCloudWebDriverBaseCapabilities(platform, deviceName),
+              }),
+            };
+          },
+        }),
+      listArtifactsFromEnv: async (providerSessionId, env) =>
+        await listTestMuArtifactsFromEnv(CLOUD_WEBDRIVER_PROVIDERS.testMu, providerSessionId, env),
+    },
   ];
+
+  async function listTestMuArtifactsFromEnv(
+    provider: string,
+    providerSessionId: string | undefined,
+    env: DefaultCloudWebDriverArtifactEnv,
+  ): Promise<CloudArtifactsResult | undefined> {
+    const { listTestMuCloudArtifacts } = await loadTestMu();
+    return await listTestMuCloudArtifacts(provider, providerSessionId, {
+      clientVersion: dependencies.clientVersion,
+      ...requireTestMuCredentials(env, 'TestMu artifact lookup'),
+      endpoint: env.TESTMU_API_ENDPOINT,
+    });
+  }
+}
+
+function requireTestMuCredentials(
+  env: DefaultCloudWebDriverArtifactEnv,
+  providerLabel: string,
+): { username: string; accessKey: string } {
+  return {
+    username: requireEnv(env, 'LT_USERNAME', providerLabel),
+    accessKey: requireEnv(env, 'LT_ACCESS_KEY', providerLabel),
+  };
+}
+
+async function resolveTestMuAppReference(options: {
+  clientVersion: string;
+  app: string;
+  cwd?: string;
+  username: string;
+  accessKey: string;
+  uploadEndpoint?: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { isTestMuAppReference, uploadTestMuApp, uploadTestMuAppFromUrl } = await loadTestMu();
+  if (isTestMuAppReference(options.app)) return options.app;
+  const upload = {
+    clientVersion: options.clientVersion,
+    username: options.username,
+    accessKey: options.accessKey,
+    endpoint: options.uploadEndpoint,
+  };
+  // The hub only accepts lt:// references, so a public URL is handed to the upload API to fetch.
+  if (/^https?:\/\//i.test(options.app)) {
+    return await uploadTestMuAppFromUrl(options.app, upload, options.signal);
+  }
+  const appPath = path.resolve(options.cwd ?? process.cwd(), options.app);
+  if (!fs.existsSync(appPath)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'TestMu --provider-app must be an lt:// app id, URL, or existing local app path.',
+      { providerApp: options.app },
+    );
+  }
+  return await uploadTestMuApp(appPath, upload, options.signal);
 }
 
 async function resolveBrowserStackAppReference(options: {

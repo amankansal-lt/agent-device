@@ -1,0 +1,239 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
+import type { CloudWebDriverPlatform, CloudWebDriverUploadApp } from './runtime.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { agentDeviceRequestHeaders } from './request-headers.ts';
+import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
+import {
+  basicAuthHeader,
+  fetchProviderSessionDetails,
+  trimTrailingSlash,
+} from './webdriver-utils.ts';
+
+/**
+ * TestMu session, upload, and artifact mechanics. Loaded on demand by the provider definition;
+ * `isRealMobile: false` in `lt:options` is what routes a session to the virtual-device pool, and
+ * the hostnames still carry the lambdatest.com brand.
+ */
+const TESTMU_APP_UPLOAD_ENDPOINT = 'https://manual-api.lambdatest.com/app/upload/virtualDevice';
+export const TESTMU_APPS_ENDPOINT = 'https://manual-api.lambdatest.com/app/data';
+export const TESTMU_API_ENDPOINT = 'https://mobile-api.lambdatest.com/mobile-automation/api/v1';
+const TESTMU_DASHBOARD_TEST_URL = 'https://appautomation.lambdatest.com/test?testID=';
+/** The Appium alias TestMu resolves to the newest server it hosts for the selected OS version. */
+export const TESTMU_DEFAULT_APPIUM_VERSION = 'latest';
+
+export type TestMuCapabilitiesOptions = {
+  platform: CloudWebDriverPlatform;
+  deviceName: string;
+  osVersion: string;
+  app?: string;
+  projectName?: string;
+  buildName: string;
+  sessionName: string;
+  /** Vendor device-feature capabilities, already projected onto their `lt:options` keys. */
+  deviceFeatures?: Record<string, unknown>;
+  configured?: Record<string, unknown>;
+};
+
+export type TestMuAuth = {
+  username: string;
+  accessKey: string;
+};
+
+export type TestMuSessionDetailsOptions = TestMuAuth & {
+  clientVersion: string;
+  endpoint?: string | URL;
+};
+
+export async function listTestMuCloudArtifacts(
+  provider: string,
+  providerSessionId: string | undefined,
+  options: TestMuSessionDetailsOptions,
+): Promise<CloudArtifactsResult | undefined> {
+  if (!providerSessionId) return undefined;
+  const details = await fetchTestMuSessionDetails(providerSessionId, options);
+  const artifacts = mapTestMuArtifacts(provider, providerSessionId, details);
+  return cloudArtifactsReadyOrPending({
+    provider,
+    providerSessionId,
+    artifacts,
+    pendingMessage: 'TestMu artifacts are not ready yet.',
+  });
+}
+
+export type TestMuUploadOptions = TestMuAuth & {
+  clientVersion: string;
+  endpoint?: string | URL;
+};
+
+/** Uploads a local `.apk`, `.ipa`, or zipped simulator `.app` and returns its `lt://` reference. */
+export async function uploadTestMuApp(
+  appPath: string,
+  options: TestMuUploadOptions,
+  signal?: AbortSignal,
+): Promise<string> {
+  signal?.throwIfAborted();
+  const file = await fs.readFile(appPath);
+  const form = new FormData();
+  form.set('appFile', new Blob([file]), path.basename(appPath));
+  form.set('name', path.parse(appPath).name);
+  return await postTestMuUpload(form, options, signal);
+}
+
+/** Has TestMu fetch a public app URL itself, returning its `lt://` reference. */
+export async function uploadTestMuAppFromUrl(
+  url: string,
+  options: TestMuUploadOptions,
+  signal?: AbortSignal,
+): Promise<string> {
+  signal?.throwIfAborted();
+  const form = new FormData();
+  form.set('url', url);
+  form.set('name', path.basename(new URL(url).pathname) || 'app');
+  return await postTestMuUpload(form, options, signal);
+}
+
+async function postTestMuUpload(
+  form: FormData,
+  options: TestMuUploadOptions,
+  signal?: AbortSignal,
+): Promise<string> {
+  const response = await fetch(options.endpoint ?? TESTMU_APP_UPLOAD_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      ...agentDeviceRequestHeaders(options.clientVersion),
+      Authorization: basicAuthHeader(options),
+    },
+    body: form,
+    signal,
+  });
+  const json = (await response.json()) as unknown;
+  const appUrl = readTestMuAppReference(json);
+  if (!response.ok || !appUrl) {
+    throw new AppError('COMMAND_FAILED', 'TestMu app upload failed.', {
+      status: response.status,
+      response: json,
+    });
+  }
+  return appUrl;
+}
+
+export function createTestMuUploadApp(options: TestMuUploadOptions): CloudWebDriverUploadApp {
+  return async ({ appPath, options: installOptions, signal }) => {
+    const appReference = await uploadTestMuApp(appPath, options, signal);
+    return {
+      appReference,
+      bundleId: installOptions?.appIdentifierHint,
+      packageName: installOptions?.packageNameHint,
+      launchTarget: installOptions?.appIdentifierHint ?? installOptions?.packageNameHint,
+    };
+  };
+}
+
+/**
+ * Builds the W3C `alwaysMatch` capabilities for a TestMu virtual-device session.
+ *
+ * Standard Appium keys stay `appium:`-prefixed at the top level; everything TestMu-specific lives
+ * in `lt:options`. `isRealMobile: false` selects an emulator or simulator, and `w3c: true` keeps
+ * the hub on the W3C dialect agent-device speaks. Without an explicit Appium version the hub may
+ * start a 1.x server, which lacks the `mobile:` extensions the interactor issues, so `latest` is
+ * requested unless the caller pins one.
+ */
+export function buildTestMuCapabilities(
+  options: TestMuCapabilitiesOptions,
+): Record<string, unknown> {
+  const { 'lt:options': configuredLtOptions, ...configured } = options.configured ?? {};
+  const deviceFeatures = options.deviceFeatures ?? {};
+  return {
+    'appium:deviceName': options.deviceName,
+    'appium:platformVersion': options.osVersion,
+    ...(options.app ? { 'appium:app': options.app } : {}),
+    ...configured,
+    // Merged per key, never assigned: a configured `lt:options` must not drop the labels below.
+    'lt:options': {
+      isRealMobile: false,
+      w3c: true,
+      platformName: options.platform === 'ios' ? 'iOS' : 'Android',
+      deviceName: options.deviceName,
+      platformVersion: options.osVersion,
+      ...(options.app ? { app: options.app } : {}),
+      ...(options.projectName ? { project: options.projectName } : {}),
+      build: options.buildName,
+      name: options.sessionName,
+      appiumVersion: TESTMU_DEFAULT_APPIUM_VERSION,
+      video: true,
+      devicelog: true,
+      ...deviceFeatures,
+      ...asRecord(configuredLtOptions),
+    },
+  };
+}
+
+export function isTestMuAppReference(value: string): boolean {
+  return value.startsWith('lt://');
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+async function fetchTestMuSessionDetails(
+  sessionId: string,
+  options: TestMuSessionDetailsOptions,
+): Promise<Record<string, unknown>> {
+  const endpoint = new URL(
+    `${trimTrailingSlash(String(options.endpoint ?? TESTMU_API_ENDPOINT))}/sessions/${encodeURIComponent(sessionId)}`,
+  );
+  const json = await fetchProviderSessionDetails(endpoint, {
+    clientVersion: options.clientVersion,
+    auth: options,
+    service: 'TestMu',
+  });
+  // The API wraps the session in a jsend envelope: `{ status, data: {...}, message }`.
+  const details = (json as { data?: unknown }).data ?? json;
+  return details && typeof details === 'object' ? (details as Record<string, unknown>) : {};
+}
+
+function mapTestMuArtifacts(
+  provider: string,
+  providerSessionId: string,
+  details: Record<string, unknown>,
+): CloudArtifact[] {
+  const fromDetails = (
+    [
+      ['video_url', 'video', 'Session video'],
+      ['appium_logs_url', 'appium-log', 'Appium logs'],
+      ['device_logs_url', 'device-log', 'Device logs'],
+      ['network_logs_url', 'raw', 'Network logs'],
+      ['command_logs_url', 'automation-log', 'Command logs'],
+      ['screenshot_url', 'raw', 'Screenshots'],
+    ] as const
+  ).map(([field, kind, name]) =>
+    urlArtifactFromDetails(provider, providerSessionId, details, field, kind, name),
+  );
+  const dashboard: CloudArtifact = {
+    provider,
+    providerSessionId,
+    kind: 'provider-session',
+    name: 'TestMu dashboard',
+    url: `${TESTMU_DASHBOARD_TEST_URL}${encodeURIComponent(providerSessionId)}`,
+    availability: 'ready',
+  };
+  const ready = fromDetails.filter((artifact): artifact is CloudArtifact => artifact !== undefined);
+  // The dashboard link alone does not mean the session finished uploading; keep "pending" until
+  // the API reports at least one artifact URL.
+  return ready.length > 0 ? [...ready, dashboard] : [];
+}
+
+function readTestMuAppReference(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as { app_url?: unknown; app_id?: unknown };
+  if (typeof record.app_url === 'string' && record.app_url.length > 0) return record.app_url;
+  if (typeof record.app_id === 'string' && record.app_id.length > 0) {
+    return isTestMuAppReference(record.app_id) ? record.app_id : `lt://${record.app_id}`;
+  }
+  return undefined;
+}

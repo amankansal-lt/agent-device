@@ -70,24 +70,37 @@ beforeEach(() => {
           },
           app: { status: 'verified', reference: options.app },
         }
-      : {
-          provider: 'aws-device-farm',
-          service: 'AWS Device Farm',
-          verificationMessage: 'Credentials, project, and device verified.',
-          project: { name: 'Agent Device', reference: options.projectArn },
-          device: {
-            status: 'verified',
-            name: 'iPhone 15',
-            reference: options.deviceArn,
-            platform: options.platform,
-            osVersion: '17',
+      : options.provider === 'testmu'
+        ? {
+            provider: 'testmu',
+            service: 'TestMu',
+            verificationMessage: 'Credentials, virtual device, and uploaded app verified.',
+            device: {
+              status: 'verified',
+              name: options.deviceName,
+              platform: options.platform,
+              osVersion: options.osVersion,
+            },
+            app: { status: 'verified', reference: options.app },
+          }
+        : {
+            provider: 'aws-device-farm',
+            service: 'AWS Device Farm',
+            verificationMessage: 'Credentials, project, and device verified.',
+            project: { name: 'Agent Device', reference: options.projectArn },
+            device: {
+              status: 'verified',
+              name: 'iPhone 15',
+              reference: options.deviceArn,
+              platform: options.platform,
+              osVersion: '17',
+            },
+            app: {
+              status: 'missing',
+              message:
+                'No app upload is attached; AWS Device Farm does not support install after allocation.',
+            },
           },
-          app: {
-            status: 'missing',
-            message:
-              'No app upload is attached; AWS Device Farm does not support install after allocation.',
-          },
-        },
   );
 });
 
