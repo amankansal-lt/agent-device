@@ -24,10 +24,14 @@ Connect with the platform, exact device name and OS version, and the app to test
 ```bash
 agent-device connect testmu \
   --platform android \
-  --device "Pixel 8" \
+  --device "Galaxy S22 Ultra 5G" \
   --provider-os-version 14 \
   --provider-app lt://APP-id
 ```
+
+`--device` and `--provider-os-version` must match the virtual-device catalog spelling exactly. The
+hub rejects `--provider-os-version 18` for a device listed with `18.0`, so `connect` does too and
+lists the versions the device offers.
 
 `--provider-app` accepts a TestMu app reference such as `lt://APP...`, an HTTP(S) app URL, or an
 existing local app path (`.apk`, or a zipped simulator `.app` for iOS). TestMu uploads a local path
@@ -64,7 +68,8 @@ TestMu receives these values in `lt:options` when it creates the hosted session.
   issues (`deepLink`, `pressButton`, `activateApp`) land on an Appium 2.x or newer server. Pin a
   version when a suite depends on one.
 - `--provider-network-profile`, `--provider-custom-network`, and `--provider-no-resign-app` are
-  BrowserStack capabilities; a TestMu session refuses them by flag name rather than ignoring them.
+  BrowserStack capabilities; `connect testmu` and TestMu session creation refuse them by flag name
+  rather than ignoring them.
 - Session video and device logs are requested on every session so `artifacts` has something to
   return.
 
@@ -95,31 +100,46 @@ provider `connect` commands.
 
 ## Node.js client
 
-Use direct client configuration when the Node process manages TestMu credentials and selectors
-rather than a saved CLI connection profile:
+The typed client reaches TestMu through a lease. Allocate one with the provider selectors, then
+scope a client to it for normal commands. `sessions.close()` ends the hosted session and releases
+the lease; `leases.release()` in `finally` is then a no-op, and still releases the lease when a
+command fails first. The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
 
-const client = createAgentDeviceClient({
+const scope = {
+  tenant: 'testmu',
+  runId: process.env.GITHUB_RUN_ID ?? 'local-run',
+  leaseBackend: 'ios-instance',
   leaseProvider: 'testmu',
-  platform: 'android',
-  device: 'Pixel 8',
-  providerOsVersion: '14',
+} as const;
+
+const lease = await createAgentDeviceClient().leases.allocate({
+  ...scope,
+  platform: 'ios',
+  device: 'iPhone 16',
+  providerOsVersion: '18.0',
   providerApp: 'lt://APP-id',
   providerProject: 'agent-device',
   providerBuild: process.env.GITHUB_RUN_ID,
 });
+const client = createAgentDeviceClient({ ...scope, leaseId: lease.leaseId });
 
-await client.apps.open({ app: 'com.example.app' });
-const snapshot = await client.capture.snapshot({ interactiveOnly: true });
-await client.interactions.click({ selector: 'label="Continue"' });
-const closed = await client.sessions.close();
-const providerSessionId = closed.provider?.providerSessionId;
+let providerSessionId: string | undefined;
+try {
+  await client.apps.open({ app: 'com.example.app' });
+  await client.capture.snapshot({ interactiveOnly: true });
+  await client.interactions.click({ selector: 'label="Continue"' });
+  const closed = await client.sessions.close();
+  providerSessionId = closed.provider?.providerSessionId;
+} finally {
+  await client.leases.release({ ...scope, leaseId: lease.leaseId });
+}
 
 if (providerSessionId) {
   const artifacts = await client.sessions.artifacts({ provider: 'testmu', providerSessionId });
-  console.log(artifacts.cloudArtifacts);
+  if ('cloudArtifacts' in artifacts) console.log(artifacts.cloudArtifacts);
 }
 ```
 

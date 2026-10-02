@@ -441,6 +441,12 @@ test('usageForCommand resolves remote help topic', async () => {
     /Limrun, BrowserStack, AWS Device Farm, and TestMu through local provider profiles/,
   );
   assert.match(help, /TestMu uses LT_USERNAME and LT_ACCESS_KEY/);
+  const testMuFlow = help.slice(
+    help.indexOf('TestMu virtual-device flow'),
+    help.indexOf('BrowserStack hosted-device flow'),
+  );
+  assert.match(testMuFlow, /--device "iPhone 16" --provider-os-version 18\.0/);
+  assert.match(testMuFlow, /agent-device disconnect/);
   assert.match(help, /Limrun uses LIMRUN_API_KEY/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
   assert.match(help, /Generated connection profiles store app\/device selectors and ARNs/);

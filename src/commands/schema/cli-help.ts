@@ -620,11 +620,12 @@ Cloud profile flow:
 
 TestMu virtual-device flow (emulators and simulators):
   LT_USERNAME=... LT_ACCESS_KEY=...
-  agent-device connect testmu --platform android --device "Pixel 8" --provider-os-version 14 --provider-app lt://APP-id
+  agent-device connect testmu --platform ios --device "iPhone 16" --provider-os-version 18.0 --provider-app lt://APP-id
   agent-device open com.example.app
   agent-device snapshot -i
   agent-device close
   agent-device artifacts --json
+  agent-device disconnect
 
 BrowserStack hosted-device flow:
   BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=...
