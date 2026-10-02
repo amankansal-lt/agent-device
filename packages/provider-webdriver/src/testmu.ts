@@ -76,6 +76,12 @@ export async function uploadTestMuApp(
   signal?: AbortSignal,
 ): Promise<string> {
   signal?.throwIfAborted();
+  if (!(await fs.stat(appPath)).isFile()) {
+    throw new AppError('INVALID_ARGS', `TestMu can only upload an app file: ${appPath}`, {
+      appPath,
+      hint: 'Zip the .app bundle of an iOS simulator build and pass the .zip.',
+    });
+  }
   const file = await fs.readFile(appPath);
   const form = new FormData();
   form.set('appFile', new Blob([file]), path.basename(appPath));

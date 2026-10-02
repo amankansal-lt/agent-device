@@ -118,6 +118,26 @@ test('TestMu upload reads the lt:// reference and aborts while the request is in
   }
 });
 
+// iOS simulator builds are `.app` directories; the upload API only takes a file.
+test('TestMu upload rejects an unzipped .app bundle before calling the upload API', async () => {
+  const tempDir = await mkdtempForTest('agent-device-testmu-app-dir-');
+  const appPath = path.join(tempDir, 'Demo.app');
+  try {
+    await fs.mkdir(appPath);
+    const fetchMock = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+    await assert.rejects(uploadTestMuApp(appPath, auth), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.match(String(error.details?.hint), /[Zz]ip the \.app bundle/);
+      return true;
+    });
+    assert.equal(fetchMock.mock.calls.length, 0);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('the install adapter uploads the local build and launches the hinted app id', async () => {
   const tempDir = await mkdtempForTest('agent-device-testmu-install-');
   const appPath = path.join(tempDir, 'Demo.apk');
