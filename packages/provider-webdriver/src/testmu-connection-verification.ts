@@ -1,10 +1,6 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  fetchProviderVerificationJson,
-  sameOsVersion,
-  trimTrailingSlash,
-} from './webdriver-utils.ts';
+import { fetchProviderVerificationJson, trimTrailingSlash } from './webdriver-utils.ts';
 import { TESTMU_API_ENDPOINT, TESTMU_APPS_ENDPOINT, isTestMuAppReference } from './testmu.ts';
 import type {
   CloudWebDriverConnectionVerification,
@@ -32,17 +28,25 @@ export async function verifyTestMuConnection(
     undefined,
     clientVersion,
   );
-  const matchedDevice = readTestMuVirtualDevices(catalog, options.platform).find(
-    (device) =>
-      device.name === options.deviceName &&
-      device.osVersions.some((osVersion) => sameOsVersion(osVersion, options.osVersion)),
+  const namedDevices = readTestMuVirtualDevices(catalog, options.platform).filter(
+    (device) => device.name === options.deviceName,
+  );
+  // Exact match on purpose: the hub rejects `18` for a device the catalog lists as `18.0`.
+  const matchedDevice = namedDevices.find((device) =>
+    device.osVersions.includes(options.osVersion),
   );
   if (!matchedDevice) {
+    const offered = [...new Set(namedDevices.flatMap((device) => device.osVersions))].sort(
+      (left, right) => left.localeCompare(right, undefined, { numeric: true }),
+    );
     throw new AppError(
       'INVALID_ARGS',
-      `TestMu virtual device "${options.deviceName}" with ${options.platform} ${options.osVersion} is not available.`,
+      `TestMu virtual device "${options.deviceName}" with ${options.platform} ${options.osVersion} is not available${
+        offered.length > 0 ? `; ${options.deviceName} offers ${offered.join(', ')}` : ''
+      }.`,
       {
         hint: 'Choose an exact device name and OS version from the TestMu virtual-device capability generator.',
+        ...(offered.length > 0 ? { availableOsVersions: offered } : {}),
       },
     );
   }

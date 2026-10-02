@@ -130,7 +130,7 @@ export async function fetchProviderSessionDetails(
   return json;
 }
 
-/** `1.0` and `1` name the same OS release on every hosted provider's catalog. */
+/** `1.0` and `1` name the same OS release on BrowserStack's catalog; TestMu's hub matches spellings exactly. */
 export function sameOsVersion(left: string, right: string): boolean {
   const normalize = (value: string) => value.replace(/(?:\.0)+$/, '');
   return normalize(left) === normalize(right);

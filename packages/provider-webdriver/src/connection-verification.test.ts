@@ -268,6 +268,48 @@ test('TestMu rejects a device or OS version missing from the virtual-device cata
   );
 });
 
+// The hub rejects `platformVersion: '18'` for a catalog entry spelled `18.0`, so connect must too.
+test('TestMu matches the catalog OS version spelling exactly and lists the offered versions', async () => {
+  const catalog = {
+    app: {
+      devices: {
+        ios: {
+          brands: {
+            Apple: [{ name: 'iPhone 16', osVersion: ['18.1', '26.0', '18.0', '18.5', '26.2'] }],
+          },
+        },
+      },
+    },
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('capability/generator')
+        ? jsonResponse(catalog)
+        : jsonResponse({ data: [], metaData: { total: 0 } }),
+    ),
+  );
+  const iosOptions = { ...testMuOptions, platform: 'ios' as const, deviceName: 'iPhone 16' };
+
+  await assert.rejects(
+    createProvider().verifyConnection({ ...iosOptions, osVersion: '18' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal((error as { code?: string }).code, 'INVALID_ARGS');
+      assert.match(error.message, /iPhone 16 offers 18\.0, 18\.1, 18\.5, 26\.0, 26\.2/);
+      return true;
+    },
+  );
+
+  const result = await createProvider().verifyConnection({ ...iosOptions, osVersion: '18.0' });
+  assert.deepEqual(result.device, {
+    status: 'verified',
+    name: 'iPhone 16',
+    platform: 'ios',
+    osVersion: '18.0',
+  });
+});
+
 test('TestMu classifies rejected credentials without exposing them', async () => {
   vi.stubGlobal(
     'fetch',
